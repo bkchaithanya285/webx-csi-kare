@@ -46,7 +46,13 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 
 export default function AdminDashboardPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("webx_admin_authenticated") === "true" ||
+             localStorage.getItem("webx_admin_authenticated") === "true";
+    }
+    return false;
+  });
   const [adminPass, setAdminPass] = useState("");
   const [passError, setPassError] = useState("");
 
@@ -92,15 +98,22 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     document.body.classList.add("admin-page");
+    const isAuth = sessionStorage.getItem("webx_admin_authenticated") === "true" ||
+                   localStorage.getItem("webx_admin_authenticated") === "true";
+    if (isAuth && !isAuthenticated) {
+      setIsAuthenticated(true);
+    }
     return () => {
       document.body.classList.remove("admin-page");
     };
   }, []);
 
-  // Authenticate Admin Passcode
+  // Authenticate Admin Passcode (Persists across browser refreshes)
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (adminPass.trim() === "csi@221") {
+      sessionStorage.setItem("webx_admin_authenticated", "true");
+      localStorage.setItem("webx_admin_authenticated", "true");
       setIsAuthenticated(true);
       setPassError("");
     } else {
@@ -838,6 +851,8 @@ export default function AdminDashboardPage() {
           </button>
           <button
             onClick={() => {
+              sessionStorage.removeItem("webx_admin_authenticated");
+              localStorage.removeItem("webx_admin_authenticated");
               setIsAuthenticated(false);
               setAdminPass("");
             }}
