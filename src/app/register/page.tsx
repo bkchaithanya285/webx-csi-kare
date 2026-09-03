@@ -51,6 +51,20 @@ export default function RegisterPage() {
       }
     });
 
+    // Check if participant already has an active ongoing review or payment session
+    const activeStep = sessionStorage.getItem("webx_registration_step");
+    const activeExpiry = Number(sessionStorage.getItem("webx_payment_seat_lock_expiry"));
+    if (activeExpiry && activeExpiry > Date.now()) {
+      if (activeStep === "payment") {
+        router.replace("/payment");
+        return;
+      }
+      if (activeStep === "review") {
+        router.replace("/review");
+        return;
+      }
+    }
+
     const prefix = email.split("@")[0].trim().toUpperCase();
 
     // 1. Try to restore any in-progress draft saved prior to refresh
@@ -207,15 +221,35 @@ export default function RegisterPage() {
         return;
       }
 
-      // Create 5-minute temporary seat reservation
-      const resResult = await reserveTeamSlot(teamName, leadEmail);
-      if (!resResult.success) {
-        setError(resResult.message || "Failed to reserve slot.");
-        setLoading(false);
-        return;
+      // Check if we already have an active unexpired seat reservation
+      let resId = "";
+      let expiryTime = 0;
+
+      const existingRaw = sessionStorage.getItem("webx_draft_team");
+      const existingExpiry = Number(sessionStorage.getItem("webx_payment_seat_lock_expiry"));
+
+      if (existingRaw && existingExpiry && existingExpiry > Date.now()) {
+        try {
+          const parsed = JSON.parse(existingRaw);
+          if (parsed.reservationId) {
+            resId = parsed.reservationId;
+            expiryTime = existingExpiry;
+          }
+        } catch (e) {}
       }
 
-      const expiryTime = resResult.expiresAt || (Date.now() + 5 * 60 * 1000);
+      // If no valid reservation exists, create a new 5-minute reservation
+      if (!resId || !expiryTime || expiryTime <= Date.now()) {
+        const resResult = await reserveTeamSlot(teamName, leadEmail);
+        if (!resResult.success) {
+          setError(resResult.message || "Failed to reserve slot.");
+          setLoading(false);
+          return;
+        }
+        resId = resResult.reservationId || `RES-${Date.now()}`;
+        expiryTime = resResult.expiresAt || (Date.now() + 5 * 60 * 1000);
+        sessionStorage.setItem("webx_payment_seat_lock_expiry", String(expiryTime));
+      }
 
       // Save draft registration state for Review / Payment
       sessionStorage.setItem(
@@ -224,11 +258,11 @@ export default function RegisterPage() {
           teamName: teamName.trim(),
           leadEmail,
           members,
-          reservationId: resResult.reservationId,
+          reservationId: resId,
           expiresAt: expiryTime,
         })
       );
-      sessionStorage.setItem("webx_payment_seat_lock_expiry", String(expiryTime));
+      sessionStorage.setItem("webx_registration_step", "review");
 
       router.push("/review");
     } catch (err: any) {

@@ -32,12 +32,36 @@ export default function LandingPage() {
     registrationOpen: true,
   });
 
+  const [enterWebHref, setEnterWebHref] = useState("/login");
+
   useEffect(() => {
     // Read local cache immediately upon client mount (zero hydration mismatch)
     try {
       const saved = localStorage.getItem("webx_cached_capacity");
       if (saved) {
         setCapacity(JSON.parse(saved));
+      }
+
+      const email = localStorage.getItem("webx_lead_email");
+      if (email) {
+        const teamId = localStorage.getItem("webx_user_team_id");
+        if (teamId) {
+          setEnterWebHref("/dashboard");
+          return;
+        }
+        const activeStep = sessionStorage.getItem("webx_registration_step");
+        const activeExpiry = Number(sessionStorage.getItem("webx_payment_seat_lock_expiry"));
+        if (activeExpiry && activeExpiry > Date.now()) {
+          if (activeStep === "payment") {
+            setEnterWebHref("/payment");
+            return;
+          }
+          if (activeStep === "review") {
+            setEnterWebHref("/review");
+            return;
+          }
+        }
+        setEnterWebHref("/register");
       }
     } catch (e) {}
 
@@ -130,7 +154,7 @@ export default function LandingPage() {
             </div>
           ) : (
             <Link
-              href="/login"
+              href={enterWebHref}
               className="w-full sm:w-auto px-8 py-4 rounded-xl glass-btn-primary font-extrabold tracking-widest text-lg uppercase flex items-center justify-center gap-3 shadow-xl shadow-red-900/60"
             >
               <span>ENTER THE WEB</span>
@@ -425,7 +449,7 @@ export default function LandingPage() {
           </div>
         ) : (
           <Link
-            href="/login"
+            href={enterWebHref}
             className="px-10 py-4 rounded-xl glass-btn-primary font-extrabold text-lg uppercase tracking-widest flex items-center gap-3 shadow-2xl shadow-red-900/80"
           >
             <span>TEAM LEAD LOGIN & REGISTER</span>

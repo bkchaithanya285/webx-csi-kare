@@ -16,6 +16,18 @@ export default function ReviewPage() {
   } | null>(null);
 
   useEffect(() => {
+    sessionStorage.setItem("webx_registration_step", "review");
+
+    // If reservation has expired, clear and return to register
+    const expiry = Number(sessionStorage.getItem("webx_payment_seat_lock_expiry"));
+    if (expiry && expiry <= Date.now()) {
+      sessionStorage.removeItem("webx_registration_step");
+      sessionStorage.removeItem("webx_payment_seat_lock_expiry");
+      sessionStorage.removeItem("webx_draft_team");
+      router.push("/register");
+      return;
+    }
+
     const raw = sessionStorage.getItem("webx_draft_team");
     if (!raw) {
       router.push("/register");
@@ -126,7 +138,10 @@ export default function ReviewPage() {
         {/* Actions: EDIT & PROCEED TO PAYMENT */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-white/10">
           <button
-            onClick={() => router.push("/register")}
+            onClick={() => {
+              sessionStorage.setItem("webx_registration_step", "register");
+              router.push("/register");
+            }}
             className="w-full sm:w-auto px-6 py-3.5 rounded-xl glass-btn-secondary font-bold text-xs uppercase flex items-center justify-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -134,7 +149,10 @@ export default function ReviewPage() {
           </button>
 
           <button
-            onClick={() => router.push("/payment")}
+            onClick={() => {
+              sessionStorage.setItem("webx_registration_step", "payment");
+              router.push("/payment");
+            }}
             className="w-full sm:w-auto px-8 py-4 rounded-xl glass-btn-primary font-extrabold text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-red-950/60"
           >
             <CreditCard className="w-5 h-5" />

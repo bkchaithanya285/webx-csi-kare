@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldCheck, UserCheck, LayoutDashboard, Menu, X, Sparkles, LogOut, User, ShieldAlert } from "lucide-react";
+import { ShieldCheck, UserCheck, LayoutDashboard, Menu, X, Sparkles, LogOut, User, ShieldAlert, LogIn } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getTeamByCodeOrEmail, getCapacityStatus } from "@/lib/db";
@@ -133,85 +133,82 @@ export const GlassHeader: React.FC = () => {
       }
     }
   };
-
   const navLinks = [
-    { label: "Home", href: "/" },
-    { label: "Event Details", href: "/#event-info" },
+    { label: "Home", href: "/", name: "Home" },
+    { label: "Event Details", href: "/#event-info", name: "Event Details" },
   ];
 
+  const getEnterWebHref = () => {
+    if (typeof window !== "undefined") {
+      const activeStep = sessionStorage.getItem("webx_registration_step");
+      const activeExpiry = Number(sessionStorage.getItem("webx_payment_seat_lock_expiry"));
+      if (activeExpiry && activeExpiry > Date.now()) {
+        if (activeStep === "payment") return "/payment";
+        if (activeStep === "review") return "/review";
+      }
+    }
+    return "/register";
+  };
+
   return (
-    <header className="sticky top-0 z-40 w-full px-4 py-3 sm:px-8">
-      <div className="max-w-7xl mx-auto rounded-2xl glass-panel px-4 py-3 sm:px-6 flex items-center justify-between transition-all border border-white/10 shadow-2xl backdrop-blur-xl">
+    <header className="sticky top-0 z-50 w-full px-4 py-3 sm:px-8">
+      <div className="mx-auto max-w-7xl rounded-2xl glass-header px-4 py-2.5 sm:px-6 flex items-center justify-between shadow-2xl transition-all duration-300">
         
-        {/* Left / Center CSI Logo (Settled position) */}
+        {/* Brand Logo & Chapter Title */}
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="relative w-10 h-10 sm:w-12 sm:h-12 transition-transform duration-300 group-hover:scale-110 flex items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+          <div className="w-10 h-10 rounded-xl overflow-hidden glass-btn-secondary p-1 flex items-center justify-center border border-red-500/30 group-hover:border-red-500 transition-colors">
             <img
               src="/assets/csi logo.png"
-              alt="CSI Club Logo"
-              className="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(229,9,20,0.6)]"
+              alt="CSI KARE"
+              width={36}
+              height={36}
               loading="lazy"
+              className="object-contain filter drop-shadow group-hover:scale-105 transition-transform"
             />
           </div>
           <div className="flex flex-col">
-            <span className="font-extrabold text-base sm:text-lg tracking-wider text-white">
+            <span className="font-black tracking-wider text-base text-white group-hover:text-red-400 transition-colors">
               CSI KARE
             </span>
-            <span className="text-[10px] sm:text-xs text-gray-400 font-medium tracking-widest uppercase">
+            <span className="text-[10px] tracking-widest text-gray-400 font-semibold uppercase">
               Computer Society of India
             </span>
           </div>
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+        <nav className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (
               <Link
-                key={link.href}
+                key={link.name}
                 href={link.href}
-                onClick={(e) => handleNavClick(link.href, e)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                className={`text-sm font-semibold tracking-wide transition-colors ${
                   isActive
-                    ? "bg-red-600/30 text-white border border-red-500/40 shadow-lg shadow-red-950/40 glow-text-red"
-                    : "text-gray-300 hover:text-white hover:bg-white/5"
+                    ? "text-red-500 font-bold"
+                    : "text-gray-300 hover:text-white"
                 }`}
               >
-                {link.label}
+                {link.name}
               </Link>
             );
           })}
         </nav>
 
-        {/* Action Buttons: Sign In / Register & User Session */}
+        {/* Right Actions: User info, Logout, and CTA */}
         <div className="hidden md:flex items-center gap-3">
           {loggedInEmail ? (
             <div className="flex items-center gap-2">
-              <Link
-                href={hasTeam ? "/dashboard" : "/register"}
-                title={hasTeam ? "View Team Event Pass" : "Register Your Team"}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold glass-panel border border-emerald-500/30 text-emerald-300 hover:border-emerald-500/60 hover:text-white flex items-center gap-1.5 transition-all"
-              >
-                <User className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="max-w-[160px] truncate font-bold text-white">
-                  {teamName || loggedInEmail.split("@")[0]}
-                </span>
-                {hasTeam ? (
-                  <span className="text-[10px] text-emerald-400 font-extrabold uppercase whitespace-nowrap">
-                    (Event Pass)
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap">
-                    (Logged In)
-                  </span>
-                )}
-              </Link>
+              <div className="px-3.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs font-mono font-medium text-gray-300 flex items-center gap-2">
+                <User className="w-3.5 h-3.5 text-red-400" />
+                <span className="max-w-[130px] truncate">{loggedInEmail.split("@")[0]}</span>
+                <span className="text-[10px] text-gray-500 font-sans">(Logged In)</span>
+              </div>
               <button
                 onClick={handleLogout}
-                title="Sign Out"
-                className="p-2 rounded-xl text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-white/10 transition-colors"
+                className="p-2 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-red-400 hover:bg-red-950/40 transition-colors"
+                title="Logout"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -219,9 +216,9 @@ export const GlassHeader: React.FC = () => {
           ) : (
             <Link
               href="/login"
-              className="px-4 py-2 rounded-xl text-sm font-semibold glass-btn-secondary flex items-center gap-2"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold glass-btn-secondary flex items-center gap-1.5 text-gray-300 hover:text-white"
             >
-              <UserCheck className="w-4 h-4 text-red-400" />
+              <LogIn className="w-3.5 h-3.5 text-red-400" />
               <span>Login</span>
             </Link>
           )}
@@ -241,7 +238,7 @@ export const GlassHeader: React.FC = () => {
             </span>
           ) : (
             <Link
-              href="/register"
+              href={getEnterWebHref()}
               className="px-5 py-2 rounded-xl text-sm font-bold glass-btn-primary flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4" />
@@ -311,7 +308,7 @@ export const GlassHeader: React.FC = () => {
             </div>
           ) : (
             <Link
-              href="/register"
+              href={getEnterWebHref()}
               onClick={() => setMobileMenuOpen(false)}
               className="w-full py-3 rounded-xl text-center font-bold glass-btn-primary"
             >

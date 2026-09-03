@@ -45,12 +45,31 @@ export default function LoginPage() {
     setError("");
     localStorage.setItem("webx_lead_email", cleanEmail);
 
-    const existingTeam = await getTeamByCodeOrEmail(cleanEmail);
+    await routeToActiveStep(cleanEmail);
+  };
+
+  const routeToActiveStep = async (email: string) => {
+    const existingTeam = await getTeamByCodeOrEmail(email);
     if (existingTeam) {
-      router.push("/dashboard");
-    } else {
-      router.push("/register");
+      router.replace("/dashboard");
+      return;
     }
+
+    // Check if user has an active ongoing review or payment session
+    const activeStep = sessionStorage.getItem("webx_registration_step");
+    const activeExpiry = Number(sessionStorage.getItem("webx_payment_seat_lock_expiry"));
+    if (activeExpiry && activeExpiry > Date.now()) {
+      if (activeStep === "payment") {
+        router.replace("/payment");
+        return;
+      }
+      if (activeStep === "review") {
+        router.replace("/review");
+        return;
+      }
+    }
+
+    router.replace("/register");
   };
 
   useEffect(() => {
@@ -61,14 +80,8 @@ export default function LoginPage() {
       localStorage.removeItem("webx_team_name");
       signOut(auth).catch(() => {});
     } else if (stored && isKluEmail(stored)) {
-      // User is ALREADY logged in! Automatically direct them to their destination
-      getTeamByCodeOrEmail(stored).then((existingTeam) => {
-        if (existingTeam) {
-          router.replace("/dashboard");
-        } else {
-          router.replace("/register");
-        }
-      });
+      // User is ALREADY logged in! Automatically direct them to their exact active step
+      routeToActiveStep(stored);
       return;
     }
 
@@ -76,12 +89,7 @@ export default function LoginPage() {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (user?.email && isKluEmail(user.email)) {
         localStorage.setItem("webx_lead_email", user.email.toLowerCase());
-        const existingTeam = await getTeamByCodeOrEmail(user.email);
-        if (existingTeam) {
-          router.replace("/dashboard");
-        } else {
-          router.replace("/register");
-        }
+        await routeToActiveStep(user.email.toLowerCase());
       }
     });
 

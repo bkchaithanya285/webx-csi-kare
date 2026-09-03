@@ -54,6 +54,8 @@ export default function PaymentPage() {
   }, []);
 
   useEffect(() => {
+    sessionStorage.setItem("webx_registration_step", "payment");
+
     const raw = sessionStorage.getItem("webx_draft_team");
     if (!raw) {
       router.push("/register");
@@ -194,6 +196,7 @@ export default function PaymentPage() {
       localStorage.setItem("webx_user_team_id", confirmedTeamId);
       sessionStorage.removeItem("webx_draft_team");
       sessionStorage.removeItem("webx_payment_seat_lock_expiry");
+      sessionStorage.removeItem("webx_registration_step");
       localStorage.removeItem("webx_reg_form_autosave");
 
       // Instant navigation to success page
