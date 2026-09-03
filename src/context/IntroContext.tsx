@@ -18,6 +18,15 @@ export const IntroProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [introStage, setIntroStage] = useState<IntroStage>("check");
 
   useEffect(() => {
+    // Check if current route is admin or pass verification (Google Lens QR scan)
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname;
+      if (path.startsWith("/admin") || path.startsWith("/verify")) {
+        setIntroStage("completed");
+        return;
+      }
+    }
+
     // Check session storage on initial mount
     const isCompleted = sessionStorage.getItem("webx_intro_completed");
 

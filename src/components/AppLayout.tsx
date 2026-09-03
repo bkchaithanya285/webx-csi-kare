@@ -16,16 +16,18 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   const { introStage, skipIntro } = useIntro();
 
   const isAdminRoute = pathname?.startsWith("/admin");
+  const isVerifyRoute = pathname?.startsWith("/verify");
+  const shouldBypassIntro = isAdminRoute || isVerifyRoute;
 
   useEffect(() => {
-    // Skip intro only on admin management routes
-    if (isAdminRoute && introStage !== "completed") {
+    // Skip intro on admin management and QR pass verification routes
+    if (shouldBypassIntro && introStage !== "completed") {
       skipIntro();
     }
-  }, [isAdminRoute, introStage, skipIntro]);
+  }, [shouldBypassIntro, introStage, skipIntro]);
 
-  // If admin route or intro completed: render website
-  if (isAdminRoute || introStage === "completed") {
+  // If admin route, QR verify route, or intro completed: render website
+  if (shouldBypassIntro || introStage === "completed") {
     // Dedicated Standalone Admin Layout (Completely isolated from participant session/pass)
     if (isAdminRoute) {
       return (
