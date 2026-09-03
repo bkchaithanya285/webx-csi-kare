@@ -279,98 +279,297 @@ export default function AdminDashboardPage() {
     setTimeout(() => setSaveSuccess(""), 3000);
   };
 
-  // Export Data to Real Microsoft Excel (.xlsx)
+  // Export Data to Real Microsoft Excel (.xlsx) with 4 rows per team
   const exportToExcel = () => {
     if (filteredTeams.length === 0) {
       alert("No teams to export matching the current filter.");
       return;
     }
 
-    const data = filteredTeams.map((t, idx) => {
-      const m = t.members || [];
-      return {
-        "S.No": idx + 1,
-        "Team ID": t.teamId,
-        "Team Name": t.teamName,
-        "Lead Email": t.leadEmail,
-        "Payment Status": t.paymentStatus,
-        "UTR / Transaction Ref": t.utrNumber || "N/A",
-        "Registered Date": t.createdAt ? new Date(t.createdAt).toLocaleString() : "N/A",
-        // Member 1 (Lead)
-        "Lead (M1) Name": m[0]?.name || "",
-        "Lead (M1) Reg No": m[0]?.regNo || "",
-        "Lead (M1) Dept": m[0]?.department || "",
-        "Lead (M1) Year": m[0]?.year || "",
-        "Lead (M1) Sec": m[0]?.section || "",
-        "Lead (M1) Mobile": m[0]?.mobile || "",
-        "Lead (M1) Email": m[0]?.email || "",
-        "Lead (M1) Accomm": m[0]?.accommodation || "",
-        "Lead (M1) Hostel": m[0]?.hostel || "",
-        "Lead (M1) Room": m[0]?.roomNo || "",
-        // Member 2
-        "M2 Name": m[1]?.name || "",
-        "M2 Reg No": m[1]?.regNo || "",
-        "M2 Dept": m[1]?.department || "",
-        "M2 Year": m[1]?.year || "",
-        "M2 Sec": m[1]?.section || "",
-        "M2 Mobile": m[1]?.mobile || "",
-        "M2 Email": m[1]?.email || "",
-        "M2 Accomm": m[1]?.accommodation || "",
-        "M2 Hostel": m[1]?.hostel || "",
-        "M2 Room": m[1]?.roomNo || "",
-        // Member 3
-        "M3 Name": m[2]?.name || "",
-        "M3 Reg No": m[2]?.regNo || "",
-        "M3 Dept": m[2]?.department || "",
-        "M3 Year": m[2]?.year || "",
-        "M3 Sec": m[2]?.section || "",
-        "M3 Mobile": m[2]?.mobile || "",
-        "M3 Email": m[2]?.email || "",
-        "M3 Accomm": m[2]?.accommodation || "",
-        "M3 Hostel": m[2]?.hostel || "",
-        "M3 Room": m[2]?.roomNo || "",
-        // Member 4
-        "M4 Name": m[3]?.name || "",
-        "M4 Reg No": m[3]?.regNo || "",
-        "M4 Dept": m[3]?.department || "",
-        "M4 Year": m[3]?.year || "",
-        "M4 Sec": m[3]?.section || "",
-        "M4 Mobile": m[3]?.mobile || "",
-        "M4 Email": m[3]?.email || "",
-        "M4 Accomm": m[3]?.accommodation || "",
-        "M4 Hostel": m[3]?.hostel || "",
-        "M4 Room": m[3]?.roomNo || "",
-      };
+    // 4 rows per team (1 row per member), with dedicated Role and Gender columns
+    const data: any[] = [];
+    filteredTeams.forEach((t, tIdx) => {
+      const mList = t.members || [];
+      mList.forEach((m, mIdx) => {
+        data.push({
+          "Team #": tIdx + 1,
+          "Team ID": t.teamId,
+          "Team Name": t.teamName,
+          "Role": mIdx === 0 ? "Leader (Member 1)" : `Member ${mIdx + 1}`,
+          "Participant Name": m.name || "N/A",
+          "Registration Number": m.regNo || "N/A",
+          "Gender": m.gender || "N/A",
+          "Department": m.department || "N/A",
+          "Year": m.year || "N/A",
+          "Section": m.section || "N/A",
+          "Mobile": m.mobile || "N/A",
+          "University Email": m.email || "N/A",
+          "Accommodation": m.accommodation || "Day Scholar",
+          "Hostel": m.hostel || "N/A",
+          "Room No": m.roomNo || "N/A",
+          "Payment Status": t.paymentStatus,
+          "UTR / Ref No": t.utrNumber || "N/A",
+          "Team Lead Email": t.leadEmail,
+          "Registered At": t.createdAt ? new Date(t.createdAt).toLocaleString() : "N/A",
+        });
+      });
     });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Registered Teams");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "All Participants");
 
     // Auto calculate column widths
     const colWidths = Object.keys(data[0] || {}).map((key) => ({
-      wch: Math.max(key.length + 3, 14),
+      wch: Math.max(key.length + 3, 15),
     }));
     worksheet["!cols"] = colWidths;
 
     const dateStr = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(workbook, `WEBX_2026_Teams_Export_${dateStr}.xlsx`);
+    XLSX.writeFile(workbook, `WEBX_2026_Participants_Export_${dateStr}.xlsx`);
   };
 
-  // Export Data to CSV
+  // Export Data to CSV (4 rows per team)
   const exportToCSV = () => {
-    const headers = "Team ID,Team Name,Lead Email,Status,UTR,Member 1,Reg 1,Dept 1,Member 2,Reg 2,Member 3,Reg 3,Member 4,Reg 4\n";
-    const rows = filteredTeams.map((t) => {
-      const m = t.members;
-      return `"${t.teamId}","${t.teamName}","${t.leadEmail}","${t.paymentStatus}","${t.utrNumber}","${m[0]?.name}","${m[0]?.regNo}","${m[0]?.department}","${m[1]?.name}","${m[1]?.regNo}","${m[2]?.name}","${m[2]?.regNo}","${m[3]?.name}","${m[3]?.regNo}"`;
-    }).join("\n");
+    if (filteredTeams.length === 0) {
+      alert("No teams to export matching the current filter.");
+      return;
+    }
 
-    const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+    const headers = [
+      "Team #",
+      "Team ID",
+      "Team Name",
+      "Role",
+      "Participant Name",
+      "Registration Number",
+      "Gender",
+      "Department",
+      "Year",
+      "Section",
+      "Mobile",
+      "University Email",
+      "Accommodation",
+      "Hostel",
+      "Room No",
+      "Payment Status",
+      "UTR",
+      "Team Lead Email",
+      "Registered At",
+    ].join(",");
+
+    const rows: string[] = [];
+    filteredTeams.forEach((t, tIdx) => {
+      (t.members || []).forEach((m, mIdx) => {
+        const role = mIdx === 0 ? "Leader (Member 1)" : `Member ${mIdx + 1}`;
+        const regDate = t.createdAt ? new Date(t.createdAt).toLocaleString() : "N/A";
+        rows.push(
+          `"${tIdx + 1}","${t.teamId}","${t.teamName}","${role}","${m.name || ""}","${m.regNo || ""}","${m.gender || ""}","${m.department || ""}","${m.year || ""}","${m.section || ""}","${m.mobile || ""}","${m.email || ""}","${m.accommodation || ""}","${m.hostel || "N/A"}","${m.roomNo || "N/A"}","${t.paymentStatus}","${t.utrNumber || "N/A"}","${t.leadEmail}","${regDate}"`
+        );
+      });
+    });
+
+    const blob = new Blob([headers + "\n" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `WEBX_Hackathon_Teams_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `WEBX_2026_Participants_Export_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
+  };
+
+  // Export Organized Master Registration Report as PDF
+  const exportToPdfReport = () => {
+    if (filteredTeams.length === 0) {
+      alert("No teams to export matching the current filter.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "pt",
+      format: "a4",
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 32;
+    const contentWidth = pageWidth - margin * 2;
+
+    let currentY = margin;
+    let pageNumber = 1;
+
+    const drawHeader = () => {
+      // Top Dark Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(margin, currentY, contentWidth, 54, "F");
+
+      // Red accent stripe
+      doc.setFillColor(220, 38, 38); // red-600
+      doc.rect(margin, currentY, 6, 54, "F");
+
+      // Header Text
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("CSI KARE • WEBX 2026 MASTER REGISTRATION REPORT", margin + 16, currentY + 22);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(203, 213, 225); // slate-300
+      const nowStr = new Date().toLocaleString();
+      doc.text(
+        `Generated: ${nowStr}  |  Filter: Status=${statusFilter}, Dept=${deptFilter}  |  Total Teams: ${filteredTeams.length} (${filteredTeams.length * 4} Confirmed Participants)`,
+        margin + 16,
+        currentY + 40
+      );
+
+      currentY += 64;
+    };
+
+    const drawFooter = () => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text(
+        "Computer Society of India (CSI) • Kalasalingam Academy of Research and Education • Confidential Administrative Report",
+        margin,
+        pageHeight - 18
+      );
+      doc.text(`Page ${pageNumber}`, pageWidth - margin - 35, pageHeight - 18);
+    };
+
+    drawHeader();
+    drawFooter();
+
+    const colX = {
+      role: margin + 8,
+      name: margin + 78,
+      reg: margin + 205,
+      gender: margin + 285,
+      dept: margin + 345,
+      year: margin + 395,
+      sec: margin + 428,
+      mobile: margin + 460,
+      email: margin + 535,
+      accomm: margin + 665,
+    };
+
+    filteredTeams.forEach((t) => {
+      const cardHeight = 104; // 22 (team bar) + 16 (table headers) + 16*4 (member rows) = 102
+
+      if (currentY + cardHeight > pageHeight - 35) {
+        doc.addPage();
+        pageNumber++;
+        currentY = margin;
+        drawHeader();
+        drawFooter();
+      }
+
+      // 1. Team Header Bar
+      doc.setFillColor(30, 41, 59); // slate-800
+      doc.rect(margin, currentY, contentWidth, 22, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(239, 68, 68); // red-500
+      doc.text(`[${t.teamId || "N/A"}]`, margin + 8, currentY + 15);
+
+      doc.setTextColor(255, 255, 255);
+      doc.text(`${t.teamName}`, margin + 68, currentY + 15);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(203, 213, 225);
+      doc.text(`Lead: ${t.leadEmail}  |  UTR: ${t.utrNumber || "N/A"}`, margin + 250, currentY + 15);
+
+      // Status Pill
+      if (t.paymentStatus === "VERIFIED") {
+        doc.setFillColor(6, 78, 59); // emerald-900
+        doc.setTextColor(52, 211, 153); // emerald-400
+      } else if (t.paymentStatus === "REJECTED") {
+        doc.setFillColor(127, 29, 29); // red-900
+        doc.setTextColor(248, 113, 113); // red-400
+      } else {
+        doc.setFillColor(120, 53, 15); // amber-900
+        doc.setTextColor(251, 191, 36); // amber-400
+      }
+      doc.rect(contentWidth + margin - 72, currentY + 4, 68, 14, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.text(t.paymentStatus, contentWidth + margin - 68, currentY + 14);
+
+      currentY += 22;
+
+      // 2. Sub-table Headers
+      doc.setFillColor(51, 65, 85); // slate-700
+      doc.rect(margin, currentY, contentWidth, 15, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+
+      doc.text("ROLE", colX.role, currentY + 11);
+      doc.text("NAME AS PER SIS", colX.name, currentY + 11);
+      doc.text("REG NO", colX.reg, currentY + 11);
+      doc.text("GENDER", colX.gender, currentY + 11);
+      doc.text("DEPT", colX.dept, currentY + 11);
+      doc.text("YR", colX.year, currentY + 11);
+      doc.text("SEC", colX.sec, currentY + 11);
+      doc.text("MOBILE", colX.mobile, currentY + 11);
+      doc.text("UNIVERSITY EMAIL", colX.email, currentY + 11);
+      doc.text("ACCOMMODATION", colX.accomm, currentY + 11);
+
+      currentY += 15;
+
+      // 3. 4 Member Rows
+      const mList = t.members || [];
+      mList.forEach((m, mIdx) => {
+        const isLeader = mIdx === 0;
+        const rowBg = mIdx % 2 === 0 ? [248, 250, 252] : [241, 245, 249];
+        doc.setFillColor(rowBg[0], rowBg[1], rowBg[2]);
+        doc.rect(margin, currentY, contentWidth, 16, "F");
+
+        doc.setDrawColor(226, 232, 240);
+        doc.line(margin, currentY + 16, margin + contentWidth, currentY + 16);
+
+        doc.setFont("helvetica", isLeader ? "bold" : "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(15, 23, 42);
+
+        const roleText = isLeader ? "Leader" : `Member ${mIdx + 1}`;
+        doc.text(roleText, colX.role, currentY + 11);
+
+        const nameTrunc = (m.name || "N/A").slice(0, 24);
+        doc.text(nameTrunc, colX.name, currentY + 11);
+
+        doc.setFont("courier", isLeader ? "bold" : "normal");
+        doc.text(m.regNo || "N/A", colX.reg, currentY + 11);
+        doc.setFont("helvetica", "normal");
+
+        doc.text(m.gender || "N/A", colX.gender, currentY + 11);
+        doc.text(m.department || "N/A", colX.dept, currentY + 11);
+        doc.text(m.year ? `Yr ${m.year}` : "N/A", colX.year, currentY + 11);
+        doc.text(m.section || "N/A", colX.sec, currentY + 11);
+        doc.text(m.mobile || "N/A", colX.mobile, currentY + 11);
+
+        const emailTrunc = (m.email || "N/A").slice(0, 22);
+        doc.text(emailTrunc, colX.email, currentY + 11);
+
+        const accommText =
+          m.accommodation === "Hosteller" && m.hostel
+            ? `${m.hostel} (${m.roomNo || "-"})`
+            : (m.accommodation || "Day Scholar");
+        doc.text(accommText.slice(0, 18), colX.accomm, currentY + 11);
+
+        currentY += 16;
+      });
+
+      currentY += 8;
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    doc.save(`WEBX_2026_Official_Registration_Report_${dateStr}.pdf`);
+    setSaveSuccess(`Official registration PDF report exported successfully!`);
+    setTimeout(() => setSaveSuccess(""), 4000);
   };
 
   // 1. Download Single Team Event Pass PDF with Team ID
@@ -721,9 +920,19 @@ export default function AdminDashboardPage() {
               <button
                 onClick={exportToCSV}
                 className="px-3.5 py-2 rounded-xl glass-btn-secondary text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border border-white/20 text-gray-300 hover:text-white"
+                title="Export all participant rows to CSV (4 rows per team with Role & Gender)"
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>CSV</span>
+              </button>
+
+              <button
+                onClick={exportToPdfReport}
+                className="px-3.5 py-2 rounded-xl glass-btn-secondary text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border border-blue-500/40 text-blue-300 hover:text-white bg-blue-950/40 hover:bg-blue-900/60 transition-colors"
+                title="Export a comprehensive, beautifully organized master registration PDF report"
+              >
+                <FileText className="w-3.5 h-3.5 text-blue-400" />
+                <span>Export PDF Report</span>
               </button>
 
               <button
