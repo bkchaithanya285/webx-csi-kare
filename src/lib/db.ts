@@ -306,11 +306,11 @@ export async function getCapacityStatus(): Promise<{
   }
 }
 
-// 10-Minute Team Seat Reservation
+// 5-Minute Team Seat Reservation
 export async function reserveTeamSlot(teamName: string, leadEmail: string): Promise<{ success: boolean; reservationId?: string; expiresAt?: number; message?: string }> {
   try {
     const reservationId = `RES-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const expiresAt = Date.now() + 10 * 60 * 1000;
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
 
     const resRef = doc(db, "reservations", reservationId);
     withTimeout(
@@ -329,7 +329,7 @@ export async function reserveTeamSlot(teamName: string, leadEmail: string): Prom
 
     return { success: true, reservationId, expiresAt };
   } catch (error: any) {
-    return { success: true, reservationId: `RES-${Date.now()}`, expiresAt: Date.now() + 600000 };
+    return { success: true, reservationId: `RES-${Date.now()}`, expiresAt: Date.now() + 300000 };
   }
 }
 

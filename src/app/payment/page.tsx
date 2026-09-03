@@ -18,7 +18,18 @@ export default function PaymentPage() {
     expiresAt: number;
   } | null>(null);
 
-  const [timeLeft, setTimeLeft] = useState<number>(600); // 10 minutes in seconds
+  // 5-Minute Seat Lock Timer (Persistent across page refresh)
+  const [timeLeft, setTimeLeft] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("webx_payment_seat_lock_expiry");
+      if (stored) {
+        const remaining = Math.max(0, Math.floor((Number(stored) - Date.now()) / 1000));
+        return remaining;
+      }
+    }
+    return 300; // 5 minutes in seconds
+  });
+
   const [utr, setUtr] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -52,27 +63,37 @@ export default function PaymentPage() {
       const parsed = JSON.parse(raw);
       setDraft(parsed);
 
-      const remainingSecs = Math.max(0, Math.floor((parsed.expiresAt - Date.now()) / 1000));
-      setTimeLeft(remainingSecs > 0 ? remainingSecs : 600);
+      // Establish or restore 5-minute persistent seat lock expiry timestamp
+      let expiry = Number(sessionStorage.getItem("webx_payment_seat_lock_expiry"));
+      if (!expiry || isNaN(expiry)) {
+        expiry = parsed.expiresAt || (Date.now() + 5 * 60 * 1000);
+        sessionStorage.setItem("webx_payment_seat_lock_expiry", String(expiry));
+      }
+
+      const remainingSecs = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+      setTimeLeft(remainingSecs);
     } catch (e) {
       router.push("/register");
     }
   }, [router]);
 
-  // 10-Minute Countdown Timer
+  // 5-Minute Real-Time Synchronized Countdown Timer (Never resets on browser refresh)
   useEffect(() => {
-    if (timeLeft <= 0) return;
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const syncCountdown = () => {
+      const stored = sessionStorage.getItem("webx_payment_seat_lock_expiry");
+      const expiry = stored ? Number(stored) : draft?.expiresAt;
+      if (expiry) {
+        const remaining = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+        setTimeLeft(remaining);
+      } else {
+        setTimeLeft((prev) => Math.max(0, prev - 1));
+      }
+    };
+
+    syncCountdown();
+    const timer = setInterval(syncCountdown, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [draft]);
 
   const formatTimer = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -104,7 +125,7 @@ export default function PaymentPage() {
     if (!draft) return;
 
     if (timeLeft <= 0) {
-      setError("Your 10-minute payment slot reservation has expired. Please return to registration to renew your slot.");
+      setError("Your 5-minute payment slot reservation has expired. Please return to registration to renew your slot.");
       return;
     }
 
@@ -172,6 +193,7 @@ export default function PaymentPage() {
 
       localStorage.setItem("webx_user_team_id", confirmedTeamId);
       sessionStorage.removeItem("webx_draft_team");
+      sessionStorage.removeItem("webx_payment_seat_lock_expiry");
       localStorage.removeItem("webx_reg_form_autosave");
 
       // Instant navigation to success page

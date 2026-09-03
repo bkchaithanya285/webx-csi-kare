@@ -396,8 +396,8 @@ export default function LandingPage() {
             <p>Every team must register exactly 4 members. Partial team entries or individual entries will not be accepted.</p>
           </div>
           <div className="p-4 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
-            <span className="font-bold text-red-400 uppercase text-xs">Rule 3: 10-Min Payment Slot</span>
-            <p>Upon starting registration, a 10-minute temporary seat reservation is locked while payment verification is completed.</p>
+            <span className="font-bold text-red-400 uppercase text-xs">Rule 3: 5-Min Payment Slot</span>
+            <p>Upon starting registration, a 5-minute temporary seat reservation is locked while payment verification is completed.</p>
           </div>
         </div>
       </section>

@@ -53,11 +53,11 @@ export default function ReviewPage() {
           </p>
         </div>
 
-        {/* 10-Minute Seat Reservation Alert */}
+        {/* 5-Minute Seat Reservation Alert */}
         <div className="p-4 rounded-2xl bg-amber-950/60 border border-amber-500/50 flex items-center justify-between text-amber-200 text-xs sm:text-sm font-semibold">
           <div className="flex items-center gap-3">
             <Clock className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
-            <span>Team Slot Temporarily Reserved for 10 Minutes</span>
+            <span>Team Slot Temporarily Reserved for 5 Minutes</span>
           </div>
           <span className="text-xs font-mono bg-black/40 px-3 py-1 rounded-lg border border-amber-500/30">
             ID: {draft.reservationId}

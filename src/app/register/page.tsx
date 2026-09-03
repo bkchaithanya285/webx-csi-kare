@@ -207,13 +207,15 @@ export default function RegisterPage() {
         return;
       }
 
-      // Create 10-minute temporary seat reservation
+      // Create 5-minute temporary seat reservation
       const resResult = await reserveTeamSlot(teamName, leadEmail);
       if (!resResult.success) {
         setError(resResult.message || "Failed to reserve slot.");
         setLoading(false);
         return;
       }
+
+      const expiryTime = resResult.expiresAt || (Date.now() + 5 * 60 * 1000);
 
       // Save draft registration state for Review / Payment
       sessionStorage.setItem(
@@ -223,9 +225,10 @@ export default function RegisterPage() {
           leadEmail,
           members,
           reservationId: resResult.reservationId,
-          expiresAt: resResult.expiresAt,
+          expiresAt: expiryTime,
         })
       );
+      sessionStorage.setItem("webx_payment_seat_lock_expiry", String(expiryTime));
 
       router.push("/review");
     } catch (err: any) {
