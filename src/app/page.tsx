@@ -242,26 +242,26 @@ export default function LandingPage() {
               </div>
               <h4 className="text-2xl font-extrabold text-white">65-HOUR LEARNING EXPERIENCE</h4>
               <p className="text-gray-300 text-sm leading-relaxed">
-                A comprehensive skill enhancement program incorporating a <strong>40-Hour Guided Course</strong>, hands-on web technology modules, interactive quizzes, and project evaluation leading to <strong>2EE Academic Credits</strong>.
+                Earn <strong>2EE Academic Credits</strong> through a complete 65-hour learning journey. It combines <strong>40 hours of guided course learning</strong>, the live <strong>24-hour hackathon</strong>, and a <strong>1-hour quiz</strong> to test your skills.
               </p>
             </div>
 
             <ul className="flex flex-col gap-2.5 text-sm text-gray-300">
               <li className="flex items-center gap-3">
-                <Check className="w-4 h-4 text-cyan-400" />
-                <span><strong>Total Scope:</strong> 65 Hours Total Learning Experience</span>
+                <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span><strong>40 Hours:</strong> Guided Course &amp; Learning</span>
               </li>
               <li className="flex items-center gap-3">
-                <Check className="w-4 h-4 text-cyan-400" />
-                <span><strong>Course Module:</strong> 40-Hour Structured Course + Quiz</span>
+                <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span><strong>24 Hours:</strong> Hands-on Hackathon</span>
               </li>
               <li className="flex items-center gap-3">
-                <Check className="w-4 h-4 text-cyan-400" />
-                <span><strong>Credits Earned:</strong> Official 2EE Academic Credits</span>
+                <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span><strong>1 Hour:</strong> Knowledge Assessment Quiz</span>
               </li>
               <li className="flex items-center gap-3">
-                <Check className="w-4 h-4 text-cyan-400" />
-                <span><strong>Eligibility:</strong> All registered participants</span>
+                <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span><strong>Academic Credits:</strong> Official 2EE Credits for all participants</span>
               </li>
             </ul>
           </div>
