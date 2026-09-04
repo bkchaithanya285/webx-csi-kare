@@ -28,6 +28,9 @@ import {
   LogOut,
   Ticket,
   Archive,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import jsPDF from "jspdf";
@@ -83,6 +86,7 @@ export default function AdminDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [deptFilter, setDeptFilter] = useState("ALL");
+  const [teamIdSortOrder, setTeamIdSortOrder] = useState<"asc" | "desc">("asc");
 
   const [selectedTeam, setSelectedTeam] = useState<TeamData | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -144,6 +148,13 @@ export default function AdminDashboardPage() {
       snap.forEach((d) => {
         loaded.push(d.data() as TeamData);
       });
+
+      loaded.sort((a, b) =>
+        (a.teamId || "").localeCompare(b.teamId || "", undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+      );
 
       setTeams(loaded);
     } catch (err) {
@@ -755,22 +766,30 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Multi-Filter & Search
-  const filteredTeams = teams.filter((t) => {
-    const term = searchTerm.toLowerCase();
-    const matchesSearch =
-      !term ||
-      t.teamId?.toLowerCase().includes(term) ||
-      t.teamName.toLowerCase().includes(term) ||
-      t.leadEmail.toLowerCase().includes(term) ||
-      t.utrNumber.includes(term) ||
-      t.members.some((m) => m.name.toLowerCase().includes(term) || m.regNo.toLowerCase().includes(term));
+  // Multi-Filter & Search with Team ID Sorting
+  const filteredTeams = teams
+    .filter((t) => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch =
+        !term ||
+        t.teamId?.toLowerCase().includes(term) ||
+        t.teamName.toLowerCase().includes(term) ||
+        t.leadEmail.toLowerCase().includes(term) ||
+        t.utrNumber.includes(term) ||
+        t.members.some((m) => m.name.toLowerCase().includes(term) || m.regNo.toLowerCase().includes(term));
 
-    const matchesStatus = statusFilter === "ALL" || t.paymentStatus === statusFilter;
-    const matchesDept = deptFilter === "ALL" || t.members.some((m) => m.department === deptFilter);
+      const matchesStatus = statusFilter === "ALL" || t.paymentStatus === statusFilter;
+      const matchesDept = deptFilter === "ALL" || t.members.some((m) => m.department === deptFilter);
 
-    return matchesSearch && matchesStatus && matchesDept;
-  });
+      return matchesSearch && matchesStatus && matchesDept;
+    })
+    .sort((a, b) => {
+      const cmp = (a.teamId || "").localeCompare(b.teamId || "", undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+      return teamIdSortOrder === "asc" ? cmp : -cmp;
+    });
 
   const pendingCount = teams.filter((t) => t.paymentStatus === "PENDING").length;
   const verifiedCount = teams.filter((t) => t.paymentStatus === "VERIFIED").length;
@@ -924,6 +943,19 @@ export default function AdminDashboardPage() {
                 ))}
               </select>
 
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10">
+                <ArrowUpDown className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <select
+                  value={teamIdSortOrder}
+                  onChange={(e) => setTeamIdSortOrder(e.target.value as "asc" | "desc")}
+                  className="bg-transparent text-white text-xs outline-none cursor-pointer"
+                  title="Sort teams by Team ID"
+                >
+                  <option value="asc" className="bg-slate-900 text-white">Team ID (Asc 001 → 100)</option>
+                  <option value="desc" className="bg-slate-900 text-white">Team ID (Desc 100 → 001)</option>
+                </select>
+              </div>
+
               <button
                 onClick={exportToExcel}
                 className="px-4 py-2 rounded-xl glass-btn-primary text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-md shadow-emerald-950/60 bg-emerald-700 hover:bg-emerald-600 text-white"
@@ -978,7 +1010,22 @@ export default function AdminDashboardPage() {
               <table className="w-full text-left text-xs text-gray-300">
                 <thead className="bg-slate-900/90 text-gray-400 font-extrabold uppercase tracking-wider border-b border-white/10">
                   <tr>
-                    <th className="p-4">Team ID</th>
+                    <th
+                      onClick={() => setTeamIdSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                      className="p-4 cursor-pointer select-none hover:text-white transition-colors group"
+                      title={`Click to sort by Team ID (${teamIdSortOrder === "asc" ? "Descending" : "Ascending"})`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="group-hover:text-red-400 transition-colors">Team ID</span>
+                        <span className="p-1 rounded bg-white/5 group-hover:bg-red-500/20 text-red-400 transition-colors">
+                          {teamIdSortOrder === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-red-400" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-red-400" />
+                          )}
+                        </span>
+                      </div>
+                    </th>
                     <th className="p-4">Team Name</th>
                     <th className="p-4">Lead Email</th>
                     <th className="p-4">UTR Number</th>
