@@ -35,6 +35,7 @@ import {
   RotateCcw,
   Check,
   UserPlus,
+  Info,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import jsPDF from "jspdf";
@@ -342,12 +343,18 @@ export default function AdminDashboardPage() {
 
       const cleanLeadName = leadMember.name.trim().toUpperCase();
       const cleanLeadEmail = leadMember.email.trim().toLowerCase();
-      const cleanLeadRegNo = leadMember.regNo.trim().toUpperCase();
+      const cleanLeadRegNo = (
+        selectedTeam.members[targetLeadIndex]?.regNo ||
+        leadMember.regNo ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
 
-      const sanitizedMembers = editMembers.map((m) => ({
+      const sanitizedMembers = editMembers.map((m, idx) => ({
         ...m,
         name: m.name.trim().toUpperCase(),
-        regNo: m.regNo.trim().toUpperCase(),
+        regNo: (selectedTeam.members[idx]?.regNo || m.regNo || "").trim().toUpperCase(), // strictly immutable locked
         department: m.department.trim().toUpperCase(),
         year: m.year.trim().toUpperCase(),
         section: m.section.trim().toUpperCase(),
@@ -360,8 +367,8 @@ export default function AdminDashboardPage() {
       }));
 
       const updates: Partial<TeamData> = {
-        teamName: editTeamName.trim(),
-        utrNumber: selectedTeam.utrNumber || "",
+        teamName: selectedTeam.teamName, // strictly locked
+        utrNumber: selectedTeam.utrNumber || "", // strictly locked
         leadName: cleanLeadName,
         leadEmail: cleanLeadEmail,
         leadRegNo: cleanLeadRegNo,
@@ -1808,34 +1815,52 @@ export default function AdminDashboardPage() {
                     </div>
                   )}
 
+                  {/* Fixed & Locked Notice Banner */}
+                  <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2.5 shadow-sm">
+                    <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>
+                      Fixed & Locked Fields: <strong>Team Name</strong>, <strong>Team ID</strong>, <strong>UTR Number</strong>, <strong>Payment Screenshot</strong>, and student <strong>Registration Numbers</strong> cannot be modified.
+                    </span>
+                  </div>
+
                   {/* Team Top Details */}
-                  <div className="grid sm:grid-cols-3 gap-4 p-4 rounded-2xl bg-white/5 border border-white/10">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-gray-300 uppercase">Team Name *</label>
-                      <input
-                        type="text"
-                        value={editTeamName}
-                        onChange={(e) => setEditTeamName(e.target.value.toUpperCase())}
-                        style={{ textTransform: "uppercase" }}
-                        className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white font-bold uppercase"
-                        placeholder="Team Name"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 p-4 rounded-2xl bg-white/5 border border-white/10">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
                         <Lock className="w-3.5 h-3.5 text-amber-400" />
-                        <span>UTR / Reference No (Locked)</span>
+                        <span>Team Name (Locked)</span>
                       </div>
-                      <div className="px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-emerald-400 font-mono font-bold truncate" title={selectedTeam.utrNumber}>
+                      <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-white font-bold uppercase truncate" title={selectedTeam.teamName}>
+                        {selectedTeam.teamName}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Team ID (Locked)</span>
+                      </div>
+                      <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-red-400 font-black font-mono truncate">
+                        {selectedTeam.teamId || "N/A"}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>UTR / Ref No (Locked)</span>
+                      </div>
+                      <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-emerald-400 font-mono font-bold truncate" title={selectedTeam.utrNumber}>
                         {selectedTeam.utrNumber || "N/A"}
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase">
+
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
                         <Lock className="w-3.5 h-3.5 text-amber-400" />
                         <span>Screenshot Proof (Locked)</span>
                       </div>
-                      <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between min-h-[38px]">
+                      <div className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between min-h-[38px]">
                         {selectedTeam.paymentScreenshotUrl ? (
                           <a
                             href={selectedTeam.paymentScreenshotUrl}
@@ -1934,18 +1959,16 @@ export default function AdminDashboardPage() {
                               </div>
 
                               <div className="flex flex-col gap-1">
-                                <span className="text-[10px] text-gray-400 font-bold uppercase">Reg No *</span>
-                                <input
-                                  type="text"
-                                  value={m.regNo}
-                                  onChange={(e) => {
-                                    const updated = [...editMembers];
-                                    updated[idx] = { ...updated[idx], regNo: e.target.value };
-                                    setEditMembers(updated);
-                                  }}
-                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white font-mono"
-                                  placeholder="e.g. 99240040..."
-                                />
+                                <span className="text-[10px] text-gray-400 font-bold uppercase flex items-center gap-1">
+                                  <Lock className="w-2.5 h-2.5 text-amber-400" />
+                                  <span>Reg No (Locked)</span>
+                                </span>
+                                <div className="px-3 py-2 rounded-lg bg-slate-900/90 border border-white/10 text-xs text-red-400 font-mono font-bold flex items-center justify-between">
+                                  <span>{m.regNo || selectedTeam.members[idx]?.regNo || "N/A"}</span>
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-white/5 border border-white/10 text-amber-400 uppercase font-sans font-bold">
+                                    Fixed
+                                  </span>
+                                </div>
                               </div>
 
                               <div className="flex flex-col gap-1">
