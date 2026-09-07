@@ -361,7 +361,7 @@ export default function AdminDashboardPage() {
 
       const updates: Partial<TeamData> = {
         teamName: editTeamName.trim(),
-        utrNumber: editUtr.trim(),
+        utrNumber: selectedTeam.utrNumber || "",
         leadName: cleanLeadName,
         leadEmail: cleanLeadEmail,
         leadRegNo: cleanLeadRegNo,
@@ -1809,7 +1809,7 @@ export default function AdminDashboardPage() {
                   )}
 
                   {/* Team Top Details */}
-                  <div className="grid sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="grid sm:grid-cols-3 gap-4 p-4 rounded-2xl bg-white/5 border border-white/10">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs font-bold text-gray-300 uppercase">Team Name *</label>
                       <input
@@ -1822,14 +1822,38 @@ export default function AdminDashboardPage() {
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-gray-300 uppercase">UTR / Reference No</label>
-                      <input
-                        type="text"
-                        value={editUtr}
-                        onChange={(e) => setEditUtr(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white font-mono"
-                        placeholder="12-digit UTR"
-                      />
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>UTR / Reference No (Locked)</span>
+                      </div>
+                      <div className="px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-emerald-400 font-mono font-bold truncate" title={selectedTeam.utrNumber}>
+                        {selectedTeam.utrNumber || "N/A"}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Screenshot Proof (Locked)</span>
+                      </div>
+                      <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between min-h-[38px]">
+                        {selectedTeam.paymentScreenshotUrl ? (
+                          <a
+                            href={selectedTeam.paymentScreenshotUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-semibold hover:underline truncate"
+                            title="View proof screenshot in new tab"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span className="truncate">View Proof</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-500 italic">No proof</span>
+                        )}
+                        <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] text-amber-400 uppercase font-bold tracking-wider shrink-0 ml-1">
+                          Locked
+                        </span>
+                      </div>
                     </div>
                   </div>
 

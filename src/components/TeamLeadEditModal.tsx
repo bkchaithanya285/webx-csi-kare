@@ -16,6 +16,8 @@ import {
   User,
   Home,
   Info,
+  Receipt,
+  ExternalLink,
 } from "lucide-react";
 import { Student, TeamData, updateTeamDetails } from "@/lib/db";
 import { getTeamLeadInfo } from "@/lib/teamUtils";
@@ -230,7 +232,7 @@ export function TeamLeadEditModal({
                 Fixed & Locked Fields Notice
               </strong>
               <span>
-                To preserve verified registration records, <strong>Team Name</strong>, <strong>Team ID</strong>, and student <strong>Registration Numbers</strong> cannot be changed. All other member fields (Names in block letters, emails, mobile, department, year, section, accommodation) can be updated once.
+                To preserve verified registration and payment records, <strong>Team Name</strong>, <strong>Team ID</strong>, <strong>UTR Number</strong>, <strong>Payment Screenshot</strong>, and student <strong>Registration Numbers</strong> cannot be changed. All other member fields (Names in block letters, emails, mobile, department, year, section, accommodation) can be updated once.
               </span>
             </div>
           </div>
@@ -251,25 +253,62 @@ export function TeamLeadEditModal({
 
           <form onSubmit={handleSave} className="flex flex-col gap-6">
             
-            {/* 1. Locked Team Information Bar */}
-            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 grid sm:grid-cols-2 gap-4">
+            {/* 1. Locked Team & Payment Information Bar */}
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
                   <Lock className="w-3.5 h-3.5 text-amber-400" />
                   <span>Team Name (Locked)</span>
                 </div>
-                <div className="px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-gray-300 font-bold tracking-wide">
+                <div className="px-3 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-gray-200 font-bold tracking-wide truncate" title={team.teamName}>
                   {team.teamName}
                 </div>
               </div>
 
               <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
                   <Lock className="w-3.5 h-3.5 text-amber-400" />
                   <span>Team ID (Locked)</span>
                 </div>
-                <div className="px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-red-400 font-black font-mono">
-                  {team.teamId}
+                <div className="px-3 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-red-400 font-black font-mono truncate">
+                  {team.teamId || "N/A"}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>UTR / Ref No (Locked)</span>
+                </div>
+                <div className="px-3 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-emerald-400 font-mono font-bold truncate" title={team.utrNumber}>
+                  {team.utrNumber || "N/A"}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Screenshot Proof (Locked)</span>
+                </div>
+                <div className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between min-h-[38px]">
+                  {team.paymentScreenshotUrl ? (
+                    <a
+                      href={team.paymentScreenshotUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-semibold hover:underline truncate"
+                      title="View payment screenshot in new tab"
+                    >
+                      <Receipt className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span className="truncate">View Proof</span>
+                      <ExternalLink className="w-3 h-3 text-cyan-400/80 shrink-0" />
+                    </a>
+                  ) : (
+                    <span className="text-[11px] text-gray-500 italic">No proof attached</span>
+                  )}
+                  <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] text-amber-400 uppercase font-bold tracking-wider shrink-0 ml-1.5">
+                    Locked
+                  </span>
                 </div>
               </div>
             </div>
