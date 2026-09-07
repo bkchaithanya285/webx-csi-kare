@@ -247,8 +247,9 @@ export default function RegisterPage() {
   const handleReviewProceed = async () => {
     setError("");
 
-    if (!teamName.trim()) {
-      setError("Please provide a unique Team Name.");
+    const cleanTeam = teamName.trim().toUpperCase().replace(/\s{2,}/g, " ");
+    if (!cleanTeam) {
+      setError("Please provide a unique Team Name in block letters.");
       setActiveTab(0);
       return;
     }
@@ -301,7 +302,7 @@ export default function RegisterPage() {
       }
 
       // Check server-side uniqueness for team name and reg numbers
-      const checkRes = await checkTeamUniqueness(teamName, Array.from(regNosSet));
+      const checkRes = await checkTeamUniqueness(cleanTeam, Array.from(regNosSet));
       if (!checkRes.valid) {
         setError(checkRes.error || "Validation failed.");
         setLoading(false);
@@ -327,7 +328,7 @@ export default function RegisterPage() {
 
       // If no valid reservation exists, create a new 5-minute reservation
       if (!resId || !expiryTime || expiryTime <= Date.now()) {
-        const resResult = await reserveTeamSlot(teamName, leadEmail);
+        const resResult = await reserveTeamSlot(cleanTeam, leadEmail);
         if (!resResult.success) {
           setError(resResult.message || "Failed to reserve slot.");
           setLoading(false);
@@ -342,7 +343,7 @@ export default function RegisterPage() {
       sessionStorage.setItem(
         "webx_draft_team",
         JSON.stringify({
-          teamName: teamName.trim(),
+          teamName: cleanTeam,
           leadEmail,
           leadName: members[0]?.name || "",
           leadRegNo: members[0]?.regNo || "",
@@ -482,13 +483,17 @@ export default function RegisterPage() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. CyberWeb Innovators"
+                  placeholder="E.G. CYBERWEB INNOVATORS"
                   value={teamName}
                   onChange={(e) => {
-                    setTeamName(e.target.value);
+                    const formatted = e.target.value
+                      .toUpperCase()
+                      .replace(/\s{2,}/g, " ")
+                      .replace(/^\s+/, "");
+                    setTeamName(formatted);
                     if (teamNameError) setTeamNameError("");
                   }}
-                  className={`w-full pl-12 pr-12 py-3.5 rounded-xl glass-input text-base text-white placeholder-gray-500 font-semibold transition-all ${
+                  className={`w-full pl-12 pr-12 py-3.5 rounded-xl glass-input text-base text-white placeholder-gray-500 font-semibold uppercase font-mono tracking-wider transition-all ${
                     teamNameStatus === "taken" || teamNameError
                       ? "border-red-500 ring-2 ring-red-500/40 bg-red-950/20 text-red-200"
                       : teamNameStatus === "available"
@@ -514,7 +519,7 @@ export default function RegisterPage() {
                   <span>{teamNameError || "Change the team name, it is already taken."}</span>
                 </div>
               ) : (
-                <span className="text-xs text-gray-400">Team names are checked globally and must be unique.</span>
+                <span className="text-xs text-gray-400">Team name must be in BLOCK LETTERS with single spaces only and globally unique.</span>
               )}
             </div>
 
