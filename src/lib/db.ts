@@ -764,16 +764,29 @@ export async function getTeamByCodeOrEmail(identifier: string): Promise<TeamData
       }
     }
 
-    // Also check if participant is a member in any registered team in Firestore
+    const cleanPrefix = clean.includes("@") ? clean.split("@")[0].trim().toLowerCase() : "";
     const snap = await getDocs(collection(db, "teams"));
     if (snap && !snap.empty) {
       for (const d of snap.docs) {
         const t = d.data() as TeamData;
-        if (
-          t.leadEmail?.toLowerCase() === clean ||
-          t.teamId?.toLowerCase() === clean ||
-          t.members?.some((m) => m.email?.toLowerCase() === clean || m.regNo?.toLowerCase() === clean)
-        ) {
+        const isLead =
+          t.leadEmail?.trim().toLowerCase() === clean ||
+          t.teamId?.trim().toLowerCase() === clean ||
+          t.leadRegNo?.trim().toLowerCase() === clean ||
+          (cleanPrefix && t.leadRegNo?.trim().toLowerCase() === cleanPrefix);
+
+        const isMember = t.members?.some((m) => {
+          const mEmail = m.email?.trim().toLowerCase();
+          const mReg = m.regNo?.trim().toLowerCase();
+          return (
+            mEmail === clean ||
+            mReg === clean ||
+            (cleanPrefix && mReg === cleanPrefix) ||
+            (cleanPrefix && mEmail && mEmail.split("@")[0].toLowerCase() === cleanPrefix)
+          );
+        });
+
+        if (isLead || isMember) {
           teamMemoryCache.set(clean, { data: t, expiresAt: Date.now() + 30000 });
           if (typeof window !== "undefined") {
             try {
@@ -838,5 +851,178 @@ export async function updateTeamDetails(
   } catch (error: any) {
     console.error("Error updating team details:", error);
     return { success: false, message: error?.message || "Failed to update team details." };
+  }
+}
+
+// Admin Direct Team Registration
+export interface AdminCreateTeamInput {
+  teamName: string;
+  leadIndex?: number;
+  members: Student[];
+  paymentStatus?: "PENDING" | "VERIFIED" | "REJECTED";
+  utrNumber?: string;
+  paymentScreenshotUrl?: string;
+}
+
+export async function adminCreateTeamRegistration(
+  data: AdminCreateTeamInput
+): Promise<{ success: boolean; teamId?: string; newTeam?: TeamData; message?: string }> {
+  try {
+    const cleanTeam = (data.teamName || "").trim().toUpperCase();
+    if (!cleanTeam || cleanTeam.length < 2) {
+      return { success: false, message: "Please enter a valid Team Name (minimum 2 characters)." };
+    }
+
+    if (!data.members || data.members.length === 0) {
+      return { success: false, message: "Please provide at least 1 team member." };
+    }
+
+    // Check existing teams for duplicate team name, duplicate student reg numbers, and determine sequential ID
+    const existingIds: string[] = [];
+    const existingRegNos = new Set<string>();
+
+    const snap = await getDocs(collection(db, "teams"));
+    if (snap && !snap.empty) {
+      for (const d of snap.docs) {
+        const t = d.data() as TeamData;
+        if (t.teamId) existingIds.push(t.teamId);
+        if (t.teamName && t.teamName.trim().toUpperCase() === cleanTeam) {
+          return {
+            success: false,
+            message: `Team name "${cleanTeam}" is already registered. Please choose a different team name.`,
+          };
+        }
+        if (t.members) {
+          t.members.forEach((m) => {
+            if (m.regNo) existingRegNos.add(m.regNo.trim().toUpperCase());
+          });
+        }
+        if (t.leadRegNo) {
+          existingRegNos.add(t.leadRegNo.trim().toUpperCase());
+        }
+      }
+    }
+
+    // Intra-team and cross-team reg number validation
+    const intraRegs = new Set<string>();
+    for (let i = 0; i < data.members.length; i++) {
+      const m = data.members[i];
+      const reg = (m.regNo || "").trim().toUpperCase();
+      if (!m.name || !m.name.trim()) {
+        return { success: false, message: `Member ${i + 1} is missing their Full Name.` };
+      }
+      if (!reg) {
+        return { success: false, message: `Member ${i + 1} is missing their Registration Number.` };
+      }
+      if (!m.email || !m.email.trim()) {
+        return { success: false, message: `Member ${i + 1} is missing their Email.` };
+      }
+      if (!m.email.trim().toLowerCase().endsWith("@klu.ac.in")) {
+        return {
+          success: false,
+          message: `Member ${i + 1} email "${m.email}" must be a valid university email (@klu.ac.in) for Google Pass Login.`,
+        };
+      }
+      if (intraRegs.has(reg)) {
+        return { success: false, message: `Duplicate registration number "${reg}" within your team (Member ${i + 1}).` };
+      }
+      intraRegs.add(reg);
+
+      if (existingRegNos.has(reg)) {
+        return {
+          success: false,
+          message: `Registration number "${reg}" is already registered in another team.`,
+        };
+      }
+    }
+
+    // Compute next sequential unique Team ID (e.g. WEB-041)
+    const upperExistingIds = new Set(existingIds.map((id) => (id || "").trim().toUpperCase()));
+    let maxNum = 0;
+    const usedNumbers = new Set<number>();
+    upperExistingIds.forEach((id) => {
+      const match = id.match(/WEB-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > 0) {
+          usedNumbers.add(num);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    });
+
+    const settings = await getSystemSettings().catch(() => DEFAULT_SETTINGS);
+    const baseNumber = Math.max(maxNum, settings.lastAssignedTeamNumber || 0);
+    let candidate = baseNumber + 1;
+    while (usedNumbers.has(candidate) || upperExistingIds.has(`WEB-${String(candidate).padStart(3, "0")}`)) {
+      candidate++;
+    }
+    const formattedId = `WEB-${String(candidate).padStart(3, "0")}`;
+
+    // Sanitize member details
+    const sanitizedMembers: Student[] = data.members.map((m) => ({
+      ...m,
+      name: (m.name || "")
+        .toUpperCase()
+        .replace(/\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji}|\p{Symbol}/gu, "")
+        .replace(/[^A-Z\s.]/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim(),
+      regNo: (m.regNo || "").trim().toUpperCase(),
+      email: (m.email || "").trim().toLowerCase(),
+      section: (m.section || "").trim().toUpperCase(),
+      department: (m.department || "CSE").trim(),
+      year: (m.year || "II").trim(),
+      mobile: (m.mobile || "").trim(),
+      gender: (m.gender || "Male").trim(),
+      accommodation: m.accommodation === "Hosteller" ? "Hosteller" : "Day Scholar",
+      hostel: m.accommodation === "Hosteller" ? (m.hostel || "").trim() : "",
+      roomNo: m.accommodation === "Hosteller" ? (m.roomNo || "").trim() : "",
+    }));
+
+    // Designate leader
+    const leaderIndex =
+      typeof data.leadIndex === "number" && data.leadIndex >= 0 && data.leadIndex < sanitizedMembers.length
+        ? data.leadIndex
+        : 0;
+
+    const leadMember = sanitizedMembers[leaderIndex];
+    const leadName = leadMember?.name || "";
+    const leadEmail = leadMember?.email || "";
+    const leadRegNo = leadMember?.regNo || "";
+
+    const newTeamRef = doc(collection(db, "teams"));
+
+    const newTeam: TeamData = {
+      id: newTeamRef.id,
+      teamId: formattedId,
+      teamName: cleanTeam,
+      leadName,
+      leadEmail,
+      leadRegNo,
+      leaderIndex,
+      accountEmail: leadEmail,
+      members: sanitizedMembers,
+      paymentStatus: data.paymentStatus || "VERIFIED",
+      utrNumber: (data.utrNumber || "").trim() || `ADMIN-OFFLINE-${Date.now().toString().slice(-6)}`,
+      paymentScreenshotUrl: data.paymentScreenshotUrl || "https://res.cloudinary.com/admin-direct/verified.png",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Save directly to Firestore
+    await setDoc(newTeamRef, newTeam);
+
+    // Update settings lastAssignedTeamNumber
+    await updateSystemSettings({ lastAssignedTeamNumber: candidate }).catch(() => {});
+
+    // Invalidate caches
+    teamMemoryCache.clear();
+    memoryCapacityCache = null;
+
+    return { success: true, teamId: formattedId, newTeam };
+  } catch (error: any) {
+    console.error("Admin registration error:", error);
+    return { success: false, message: error?.message || "Failed to create team registration." };
   }
 }

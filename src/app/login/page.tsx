@@ -163,12 +163,12 @@ export default function LoginPage() {
           <div className="relative w-16 h-16 mb-2">
             <Image src="/assets/csi logo.png" alt="CSI Logo" fill sizes="64px" className="object-contain" />
           </div>
-          <span className="text-xs font-extrabold uppercase tracking-[0.2em] text-red-400">STUDENT VERIFICATION</span>
+          <span className="text-xs font-extrabold uppercase tracking-[0.2em] text-red-400">STUDENT & PARTICIPANT PORTAL</span>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-wider text-white">
-            TEAM LEAD LOGIN
+            STUDENT & TEAM LOGIN
           </h2>
           <p className="text-xs text-gray-400 max-w-xs">
-            Sign in with your Google account to proceed to team registration.
+            Sign in with your university Google account (@klu.ac.in) to access your Event Pass or register your team.
           </p>
         </div>
 

@@ -34,12 +34,14 @@ import {
   Edit3,
   RotateCcw,
   Check,
+  UserPlus,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import jsPDF from "jspdf";
 import JSZip from "jszip";
 import { PrintableEventPass } from "@/components/PrintableEventPass";
 import { AdminAnalyticsCharts } from "@/components/AdminAnalyticsCharts";
+import { AdminDirectRegistrationModal } from "@/components/AdminDirectRegistrationModal";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import {
   getCapacityStatus,
@@ -119,6 +121,7 @@ export default function AdminDashboardPage() {
   const [exportingPasses, setExportingPasses] = useState(false);
   const [exportPassProgress, setExportPassProgress] = useState("");
   const [exportingSingleTeamId, setExportingSingleTeamId] = useState<string | null>(null);
+  const [showDirectRegModal, setShowDirectRegModal] = useState(false);
 
   useEffect(() => {
     document.body.classList.add("admin-page");
@@ -397,6 +400,19 @@ export default function AdminDashboardPage() {
     } finally {
       setSavingEdit(false);
     }
+  };
+
+  // Direct Team Registration by Admin Success Handler
+  const handleDirectRegistrationSuccess = (newTeam: TeamData) => {
+    setTeams((prev) => [newTeam, ...prev]);
+    setCapacityInfo((prev) => ({
+      ...prev,
+      confirmedTeamsCount: prev.confirmedTeamsCount + 1,
+      occupiedSlots: Math.min(prev.maxTeams, prev.occupiedSlots + 1),
+      availableSlots: Math.max(0, prev.availableSlots - 1),
+    }));
+    setSaveSuccess(`Team "${newTeam.teamName}" [${newTeam.teamId}] registered successfully! Passes are now accessible.`);
+    setTimeout(() => setSaveSuccess(""), 4000);
   };
 
   // Save System Settings
@@ -1121,7 +1137,7 @@ export default function AdminDashboardPage() {
           {/* Controls Bar: Multi-Dimensional Filters, Search & Exports */}
           <div className="glass-card p-5 rounded-2xl border border-white/10 flex flex-col gap-4">
             
-            {/* Top Row: Search Input + Active Filter Indicators & Reset */}
+            {/* Top Row: Search Input + Direct Registration Button + Active Filter Indicators & Reset */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="relative w-full sm:max-w-md">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
@@ -1134,7 +1150,17 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                {/* DIRECT ADMIN REGISTRATION BUTTON */}
+                <button
+                  type="button"
+                  onClick={() => setShowDirectRegModal(true)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-red-950/60 hover:scale-105 active:scale-95 transition-all cursor-pointer border border-red-500/40"
+                >
+                  <UserPlus className="w-4 h-4 text-white shrink-0" />
+                  <span>+ Add Registration</span>
+                </button>
+
                 <span className="text-xs font-mono font-bold text-gray-300">
                   Showing <strong className="text-red-400 font-extrabold">{filteredTeams.length}</strong> of{" "}
                   <span className="text-white font-extrabold">{teams.length}</span> Teams
@@ -2101,6 +2127,14 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* DIRECT ADMIN REGISTRATION MODAL */}
+      <AdminDirectRegistrationModal
+        isOpen={showDirectRegModal}
+        onClose={() => setShowDirectRegModal(false)}
+        onSuccess={handleDirectRegistrationSuccess}
+        existingTeams={teams}
+      />
 
       {/* Hidden Offscreen Container for Generating High-Res Team Event Passes */}
       <div
