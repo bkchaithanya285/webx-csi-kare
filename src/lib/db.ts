@@ -26,6 +26,8 @@ export interface Student {
   email: string;
 }
 
+export type TeamMember = Student;
+
 export interface TeamData {
   id?: string;
   teamId?: string; // e.g. WEB-001
@@ -528,9 +530,31 @@ export async function submitTeamRegistration(
       console.warn("Could not query teams snapshot, checking cached IDs:", err);
     }
 
-    // Check local storage cache for any offline/recent submissions
-    // Determine strictly sequential integer starting at WEB-001, then WEB-002, etc.
-    const formattedId = data.teamId || getNextAvailableTeamId(existingIds);
+    // Strictly verify uniqueness: if data.teamId is missing OR already exists, compute next unique ID
+    const upperExistingIds = new Set(existingIds.map((id) => (id || "").trim().toUpperCase()));
+    let formattedId = (data.teamId || "").trim().toUpperCase();
+
+    if (!formattedId || upperExistingIds.has(formattedId)) {
+      let maxNum = 0;
+      const usedNumbers = new Set<number>();
+      upperExistingIds.forEach((id) => {
+        const match = id.match(/WEB-(\d+)/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > 0) {
+            usedNumbers.add(num);
+            if (num > maxNum) maxNum = num;
+          }
+        }
+      });
+      const settings = await getSystemSettings().catch(() => DEFAULT_SETTINGS);
+      const baseNumber = Math.max(maxNum, settings.lastAssignedTeamNumber || 0);
+      let candidate = baseNumber + 1;
+      while (usedNumbers.has(candidate) || upperExistingIds.has(`WEB-${String(candidate).padStart(3, "0")}`)) {
+        candidate++;
+      }
+      formattedId = `WEB-${String(candidate).padStart(3, "0")}`;
+    }
 
     // Clear any legacy cached IDs
     if (typeof window !== "undefined") {
@@ -562,6 +586,8 @@ export async function submitTeamRegistration(
     const newTeam: TeamData = {
       ...data,
       leadName: (data.leadName || sanitizedMembers[0]?.name || "").trim().toUpperCase(),
+      leadRegNo: (data.leadRegNo || sanitizedMembers[0]?.regNo || "").trim().toUpperCase(),
+      leaderIndex: typeof data.leaderIndex === "number" ? data.leaderIndex : 0,
       members: sanitizedMembers,
       paymentScreenshotUrl: safeScreenshotUrl,
       id: newTeamRef.id,
@@ -579,7 +605,7 @@ export async function submitTeamRegistration(
     if (match) {
       const assignedNum = parseInt(match[1], 10);
       if (!isNaN(assignedNum) && assignedNum > 0) {
-        updateSystemSettings({ lastAssignedTeamNumber: assignedNum }).catch(() => {});
+        await updateSystemSettings({ lastAssignedTeamNumber: assignedNum }).catch(() => {});
       }
     }
 
@@ -691,11 +717,23 @@ const teamMemoryCache = new Map<string, { data: TeamData; expiresAt: number }>()
 
 // Authoritative team lookup: Firestore first (source of truth), then purges cache if deleted
 export async function getTeamByCodeOrEmail(identifier: string): Promise<TeamData | null> {
-  const clean = identifier.trim().toLowerCase();
+  const raw = identifier.trim();
+  const clean = raw.toLowerCase();
   if (!clean) return null;
 
   // 1. Direct Firestore Query as the authoritative source of truth
   try {
+    // If raw matches a direct document ID (20 alphanumeric chars)
+    if (/^[a-zA-Z0-9]{15,25}$/.test(raw) && !raw.includes("@") && !raw.startsWith("WEB-")) {
+      try {
+        const docSnap = await getDoc(doc(db, "teams", raw));
+        if (docSnap.exists()) {
+          const t = docSnap.data() as TeamData;
+          return t;
+        }
+      } catch (e) {}
+    }
+
     if (clean.includes("@")) {
       const q = query(collection(db, "teams"), where("leadEmail", "==", clean), limit(1));
       const snap = await getDocs(q);

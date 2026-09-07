@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getTeamByCodeOrEmail, TeamData } from "@/lib/db";
+import { getTeamLeadInfo } from "@/lib/teamUtils";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
@@ -227,9 +228,12 @@ export default function DashboardPage() {
     );
   }
 
-  const qrVerifyUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/verify/${team.teamId}`
-    : `https://webx-hackathon.klu.ac.in/verify/${team.teamId}`;
+  const origin = typeof window !== "undefined" && window.location.origin
+    ? window.location.origin
+    : "https://webx2026.vercel.app";
+  const qrVerifyUrl = `${origin}/verify/${team.teamId || team.id}`;
+
+  const leadInfo = team ? getTeamLeadInfo(team) : null;
 
   // 4. Team Found -> Render Live Event Pass & Details
   return (
@@ -255,7 +259,13 @@ export default function DashboardPage() {
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">{team.teamName}</h1>
-          <p className="text-xs text-gray-400">Team Lead: <span className="text-gray-200 font-mono">{team.leadEmail}</span></p>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <span className="px-2 py-0.5 rounded-md bg-red-600/30 border border-red-500/50 text-red-300 font-extrabold text-[10px] tracking-wider uppercase">
+              TEAM LEAD
+            </span>
+            <span className="text-sm text-white font-bold">{leadInfo?.leadName}</span>
+            <span className="text-xs text-gray-400 font-mono">({leadInfo?.leadEmail || team.leadEmail})</span>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -350,6 +360,14 @@ export default function DashboardPage() {
               <h3 className="text-2xl sm:text-4xl font-black text-white tracking-wide">{team.teamName}</h3>
             </div>
 
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="px-2 py-0.5 rounded-md bg-red-600/30 border border-red-500/50 text-red-300 font-extrabold text-[10px] tracking-wider uppercase">
+                TEAM LEAD
+              </span>
+              <span className="text-sm text-white font-bold">{leadInfo?.leadName}</span>
+              <span className="text-xs text-gray-400 font-mono">({leadInfo?.leadEmail || team.leadEmail})</span>
+            </div>
+
             <div className="flex items-baseline gap-3 mt-1">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">TEAM ID:</span>
               <span className="text-4xl sm:text-6xl font-black font-mono text-red-500 glow-text-red tracking-wider">
@@ -421,27 +439,37 @@ export default function DashboardPage() {
           </span>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {team.members.map((m, idx) => (
-              <div key={idx} className="p-3 rounded-xl bg-slate-900/90 border border-white/10 flex flex-col gap-1 text-xs">
-                <div className="flex items-center justify-between border-b border-white/10 pb-1">
-                  <div className="flex items-center gap-1.5">
-                    <strong className="text-white text-xs">{m.name}</strong>
-                    {idx === 0 && (
-                      <span className="px-1.5 py-0.2 rounded bg-red-600/30 border border-red-500/40 text-[8px] font-bold text-red-300 uppercase">
-                        LEAD
-                      </span>
-                    )}
+            {team.members.map((m, idx) => {
+              const isLead = idx === leadInfo?.leaderIndex;
+              return (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-xl border flex flex-col gap-1 text-xs transition-all ${
+                    isLead
+                      ? "bg-red-950/40 border-red-500/60 ring-1 ring-red-500/30 shadow-lg shadow-red-950/30"
+                      : "bg-slate-900/90 border-white/10"
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-white/10 pb-1">
+                    <div className="flex items-center gap-2">
+                      <strong className="text-white text-xs">{idx + 1}. {m.name}</strong>
+                      {isLead && (
+                        <span className="px-2 py-0.5 rounded bg-red-600 text-[9px] font-black text-white uppercase tracking-wider shadow-sm">
+                          TEAM LEAD
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-mono text-red-400 font-bold text-xs">{m.regNo}</span>
                   </div>
-                  <span className="font-mono text-red-400 font-bold text-xs">{m.regNo}</span>
+                  <div className="grid grid-cols-2 gap-1 text-gray-400 text-[10px] pt-0.5">
+                    <span>Dept: <strong className="text-gray-200">{m.department}</strong></span>
+                    <span>Year: <strong className="text-gray-200">{m.year} ({m.section})</strong></span>
+                    <span>Mobile: <strong className="text-gray-200 font-mono">{m.mobile}</strong></span>
+                    <span>Accomm: <strong className="text-gray-200">{m.accommodation}</strong></span>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-1 text-gray-400 text-[10px] pt-0.5">
-                  <span>Dept: <strong className="text-gray-200">{m.department}</strong></span>
-                  <span>Year: <strong className="text-gray-200">{m.year} ({m.section})</strong></span>
-                  <span>Mobile: <strong className="text-gray-200 font-mono">{m.mobile}</strong></span>
-                  <span>Accomm: <strong className="text-gray-200">{m.accommodation}</strong></span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

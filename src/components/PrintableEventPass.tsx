@@ -4,6 +4,7 @@ import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { ShieldCheck, Calendar, MapPin, Users, Award } from "lucide-react";
 import { TeamData } from "@/lib/db";
+import { getTeamLeadInfo } from "@/lib/teamUtils";
 
 interface PrintableEventPassProps {
   team: TeamData;
@@ -11,9 +12,11 @@ interface PrintableEventPassProps {
 }
 
 export const PrintableEventPass: React.FC<PrintableEventPassProps> = ({ team, domId }) => {
-  const verifyUrl = typeof window !== "undefined" 
-    ? `${window.location.origin}/verify/${team.teamId}`
-    : `https://webx2026.vercel.app/verify/${team.teamId}`;
+  const leadInfo = getTeamLeadInfo(team);
+  const origin = typeof window !== "undefined" && window.location.origin
+    ? window.location.origin
+    : "https://webx2026.vercel.app";
+  const verifyUrl = `${origin}/verify/${team.teamId || team.id}`;
 
   return (
     <div
@@ -80,13 +83,21 @@ export const PrintableEventPass: React.FC<PrintableEventPassProps> = ({ team, do
             <h2 className="text-2xl font-black text-white tracking-wide truncate">
               {team.teamName}
             </h2>
-            <p className="text-xs text-gray-400 font-mono mt-0.5">
-              Team Lead:{" "}
-              <span className="text-gray-200 font-semibold">
-                {team.leadName ? `${team.leadName} (${team.leadEmail})` : team.leadEmail}
-              </span>{" "}
-              • UTR: <span className="text-gray-300">{team.utrNumber || "N/A"}</span>
-            </p>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="px-2 py-0.5 rounded bg-red-600/30 border border-red-500/50 text-red-300 font-extrabold text-[10px] tracking-wider uppercase">
+                TEAM LEAD
+              </span>
+              <span className="text-sm text-white font-bold">
+                {leadInfo.leadName}
+              </span>
+              <span className="text-xs text-gray-400 font-mono">
+                ({leadInfo.leadEmail || leadInfo.leadRegNo})
+              </span>
+              <span className="text-gray-500 text-xs">•</span>
+              <span className="text-xs text-gray-400 font-mono">
+                UTR: <span className="text-gray-300">{team.utrNumber || "N/A"}</span>
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-6 text-xs text-gray-300 pt-2 border-t border-white/10">
@@ -132,34 +143,54 @@ export const PrintableEventPass: React.FC<PrintableEventPassProps> = ({ team, do
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {team.members.map((m, idx) => (
-            <div
-              key={idx}
-              className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between text-xs"
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="w-6 h-6 rounded-full bg-red-600/30 text-red-400 font-bold flex items-center justify-center text-[10px] shrink-0">
-                  {idx === 0 ? "L" : idx + 1}
-                </span>
-                <div className="truncate max-w-[240px]">
-                  <strong className="text-white block truncate">
-                    {m.name || "Member " + (idx + 1)} {idx === 0 && <span className="text-[10px] text-red-400 font-normal">(Leader)</span>}
-                  </strong>
-                  <span className="text-gray-400 text-[11px] block">
-                    {m.department} • Year {m.year} • Sec {m.section} • {m.mobile}
+          {team.members.map((m, idx) => {
+            const isLead = idx === leadInfo.leaderIndex;
+            return (
+              <div
+                key={idx}
+                className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                  isLead
+                    ? "bg-red-950/40 border-red-500/60 shadow-lg shadow-red-950/40 ring-1 ring-red-500/30"
+                    : "bg-white/5 border-white/10"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-[10px] shrink-0 ${
+                      isLead
+                        ? "bg-red-600 text-white shadow-md shadow-red-600/50"
+                        : "bg-white/10 text-gray-300"
+                    }`}
+                  >
+                    {idx + 1}
+                  </span>
+                  <div className="truncate max-w-[240px]">
+                    <div className="flex items-center gap-2">
+                      <strong className="text-white block truncate">
+                        {m.name || "Member " + (idx + 1)}
+                      </strong>
+                      {isLead && (
+                        <span className="px-1.5 py-0.5 rounded bg-red-600 text-[9px] font-black text-white uppercase tracking-wider shadow-sm">
+                          Team Lead
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-gray-400 text-[11px] block">
+                      {m.department} • Year {m.year} • Sec {m.section} • {m.mobile}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-mono text-red-400 font-extrabold px-2.5 py-1 rounded bg-red-950/80 border border-red-500/30 text-[11px] block">
+                    {m.regNo}
+                  </span>
+                  <span className="text-[9px] text-gray-400 mt-0.5 block">
+                    {m.accommodation} {m.hostel ? `(${m.hostel})` : ""}
                   </span>
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <span className="font-mono text-red-400 font-extrabold px-2.5 py-1 rounded bg-red-950/80 border border-red-500/30 text-[11px] block">
-                  {m.regNo}
-                </span>
-                <span className="text-[9px] text-gray-400 mt-0.5 block">
-                  {m.accommodation} {m.hostel ? `(${m.hostel})` : ""}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

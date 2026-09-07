@@ -45,6 +45,7 @@ import {
   TeamData,
   SystemSettings,
 } from "@/lib/db";
+import { getTeamLeadInfo, normalizeTeamLead } from "@/lib/teamUtils";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 
@@ -146,7 +147,7 @@ export default function AdminDashboardPage() {
       const snap = await getDocs(collection(db, "teams"));
       const loaded: TeamData[] = [];
       snap.forEach((d) => {
-        loaded.push(d.data() as TeamData);
+        loaded.push(normalizeTeamLead({ ...d.data(), id: d.id } as TeamData));
       });
 
       loaded.sort((a, b) =>
@@ -313,13 +314,14 @@ export default function AdminDashboardPage() {
     // 4 rows per team (1 row per member), with dedicated Role and Gender columns
     const data: any[] = [];
     filteredTeams.forEach((t, tIdx) => {
+      const tLead = getTeamLeadInfo(t);
       const mList = t.members || [];
       mList.forEach((m, mIdx) => {
         data.push({
           "Team #": tIdx + 1,
           "Team ID": t.teamId,
           "Team Name": t.teamName,
-          "Role": mIdx === 0 ? "Leader (Member 1)" : `Member ${mIdx + 1}`,
+          "Role": mIdx === tLead.leaderIndex ? "Team Lead" : `Member ${mIdx + 1}`,
           "Participant Name": m.name || "N/A",
           "Registration Number": m.regNo || "N/A",
           "Gender": m.gender || "N/A",
@@ -333,7 +335,8 @@ export default function AdminDashboardPage() {
           "Room No": m.roomNo || "N/A",
           "Payment Status": t.paymentStatus,
           "UTR / Ref No": t.utrNumber || "N/A",
-          "Team Lead Email": t.leadEmail,
+          "Team Lead Name": tLead.leadName,
+          "Team Lead Email": tLead.leadEmail || t.leadEmail,
           "Registered At": t.createdAt ? new Date(t.createdAt).toLocaleString() : "N/A",
         });
       });
@@ -378,17 +381,19 @@ export default function AdminDashboardPage() {
       "Room No",
       "Payment Status",
       "UTR",
+      "Team Lead Name",
       "Team Lead Email",
       "Registered At",
     ].join(",");
 
     const rows: string[] = [];
     filteredTeams.forEach((t, tIdx) => {
+      const tLead = getTeamLeadInfo(t);
       (t.members || []).forEach((m, mIdx) => {
-        const role = mIdx === 0 ? "Leader (Member 1)" : `Member ${mIdx + 1}`;
+        const role = mIdx === tLead.leaderIndex ? "Team Lead" : `Member ${mIdx + 1}`;
         const regDate = t.createdAt ? new Date(t.createdAt).toLocaleString() : "N/A";
         rows.push(
-          `"${tIdx + 1}","${t.teamId}","${t.teamName}","${role}","${m.name || ""}","${m.regNo || ""}","${m.gender || ""}","${m.department || ""}","${m.year || ""}","${m.section || ""}","${m.mobile || ""}","${m.email || ""}","${m.accommodation || ""}","${m.hostel || "N/A"}","${m.roomNo || "N/A"}","${t.paymentStatus}","${t.utrNumber || "N/A"}","${t.leadEmail}","${regDate}"`
+          `"${tIdx + 1}","${t.teamId}","${t.teamName}","${role}","${m.name || ""}","${m.regNo || ""}","${m.gender || ""}","${m.department || ""}","${m.year || ""}","${m.section || ""}","${m.mobile || ""}","${m.email || ""}","${m.accommodation || ""}","${m.hostel || "N/A"}","${m.roomNo || "N/A"}","${t.paymentStatus}","${t.utrNumber || "N/A"}","${tLead.leadName}","${tLead.leadEmail || t.leadEmail}","${regDate}"`
         );
       });
     });
@@ -546,8 +551,9 @@ export default function AdminDashboardPage() {
 
       // 3. 4 Member Rows
       const mList = t.members || [];
+      const tLead = getTeamLeadInfo(t);
       mList.forEach((m, mIdx) => {
-        const isLeader = mIdx === 0;
+        const isLeader = mIdx === tLead.leaderIndex;
         const rowBg = mIdx % 2 === 0 ? [248, 250, 252] : [241, 245, 249];
         doc.setFillColor(rowBg[0], rowBg[1], rowBg[2]);
         doc.rect(margin, currentY, contentWidth, 16, "F");
@@ -557,9 +563,9 @@ export default function AdminDashboardPage() {
 
         doc.setFont("helvetica", isLeader ? "bold" : "normal");
         doc.setFontSize(7.5);
-        doc.setTextColor(15, 23, 42);
+        doc.setTextColor(isLeader ? 185 : 15, isLeader ? 28 : 23, isLeader ? 28 : 42);
 
-        const roleText = isLeader ? "Leader" : `Member ${mIdx + 1}`;
+        const roleText = isLeader ? "Team Lead" : `Member ${mIdx + 1}`;
         doc.text(roleText, colX.role, currentY + 11);
 
         const nameTrunc = (m.name || "N/A").slice(0, 24);
@@ -775,6 +781,7 @@ export default function AdminDashboardPage() {
         t.teamId?.toLowerCase().includes(term) ||
         t.teamName.toLowerCase().includes(term) ||
         t.leadEmail.toLowerCase().includes(term) ||
+        t.leadName?.toLowerCase().includes(term) ||
         t.utrNumber.includes(term) ||
         t.members.some((m) => m.name.toLowerCase().includes(term) || m.regNo.toLowerCase().includes(term));
 
@@ -1027,19 +1034,30 @@ export default function AdminDashboardPage() {
                       </div>
                     </th>
                     <th className="p-4">Team Name</th>
-                    <th className="p-4">Lead Email</th>
+                    <th className="p-4">Team Lead</th>
                     <th className="p-4">UTR Number</th>
                     <th className="p-4">Status</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 font-medium">
-                  {filteredTeams.map((t) => (
-                    <tr key={t.teamId} className="hover:bg-white/5 transition-colors">
-                      <td className="p-4 font-mono font-bold text-red-400">{t.teamId}</td>
-                      <td className="p-4 font-bold text-white">{t.teamName}</td>
-                      <td className="p-4 font-mono text-gray-400">{t.leadEmail}</td>
-                      <td className="p-4 font-mono text-gray-300">{t.utrNumber}</td>
+                  {filteredTeams.map((t) => {
+                    const tLead = getTeamLeadInfo(t);
+                    return (
+                      <tr key={t.teamId} className="hover:bg-white/5 transition-colors">
+                        <td className="p-4 font-mono font-bold text-red-400">{t.teamId}</td>
+                        <td className="p-4 font-bold text-white">{t.teamName}</td>
+                        <td className="p-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-white text-xs truncate max-w-[190px]">
+                              {tLead.leadName || "Team Lead"}
+                            </span>
+                            <span className="font-mono text-[11px] text-gray-400 truncate max-w-[190px]">
+                              {tLead.leadEmail || t.leadEmail}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 font-mono text-gray-300">{t.utrNumber}</td>
                       <td className="p-4">
                         <span
                           className={`px-2.5 py-1 rounded-full font-extrabold text-[10px] uppercase tracking-wider ${
@@ -1083,7 +1101,8 @@ export default function AdminDashboardPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {filteredTeams.length === 0 && (
                     <tr>
                       <td colSpan={6} className="p-12 text-center text-gray-500 font-medium">
@@ -1269,6 +1288,21 @@ export default function AdminDashboardPage() {
               <div>
                 <span className="text-xs font-mono text-red-400 font-bold">{selectedTeam.teamId}</span>
                 <h3 className="text-xl font-extrabold text-white">{selectedTeam.teamName}</h3>
+                {(() => {
+                  const selLead = getTeamLeadInfo(selectedTeam);
+                  return (
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="px-2.5 py-1 rounded-md bg-rose-600 text-white font-black text-xs uppercase tracking-wider shadow flex items-center gap-1.5">
+                        <span className="text-yellow-300">★</span> TEAM LEAD:
+                      </span>
+                      <span className="text-base text-white font-extrabold">{selLead.leadName}</span>
+                      {selLead.leadRegNo && (
+                        <span className="text-xs text-rose-300 font-mono font-bold">({selLead.leadRegNo})</span>
+                      )}
+                      <span className="text-xs text-gray-400 font-mono">• {selLead.leadEmail || selectedTeam.leadEmail}</span>
+                    </div>
+                  );
+                })()}
               </div>
               <button
                 onClick={() => setSelectedTeam(null)}
@@ -1308,14 +1342,41 @@ export default function AdminDashboardPage() {
               <div className="flex flex-col gap-3 text-xs">
                 <span className="text-xs font-bold uppercase text-gray-300">4 TEAM MEMBERS:</span>
                 <div className="flex flex-col gap-2">
-                  {selectedTeam.members.map((m, idx) => (
-                    <div key={idx} className="p-3 rounded-xl bg-white/5 border border-white/10">
-                      <strong className="text-white block">{idx + 1}. {m.name} ({m.regNo})</strong>
-                      <span className="text-gray-400">{m.department} • Year {m.year} • Sec {m.section} • {m.mobile}</span>
-                      <br />
-                      <span className="text-gray-400">Accomm: {m.accommodation} {m.hostel && `(${m.hostel} / ${m.roomNo})`}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const selLead = getTeamLeadInfo(selectedTeam);
+                    return selectedTeam.members.map((m, idx) => {
+                      const isLead = idx === selLead.leaderIndex;
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-xl border transition-all ${
+                            isLead
+                              ? "bg-rose-950/60 border-rose-500 ring-2 ring-rose-500/50 shadow-lg shadow-rose-950/50"
+                              : "bg-white/5 border-white/10"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <strong className="text-white text-sm font-bold">{idx + 1}. {m.name} ({m.regNo})</strong>
+                              {isLead && (
+                                <span className="px-2 py-0.5 rounded bg-rose-600 text-[10px] font-black text-white uppercase tracking-wider shadow flex items-center gap-1">
+                                  ★ TEAM LEAD
+                                </span>
+                              )}
+                            </div>
+                            {isLead && (
+                              <span className="text-[11px] font-black text-rose-400 uppercase tracking-wide">
+                                [LEAD]
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-gray-300">{m.department} • Year {m.year} • Sec {m.section} • {m.mobile}</span>
+                          <br />
+                          <span className="text-gray-400">Accomm: {m.accommodation} {m.hostel && `(${m.hostel} / ${m.roomNo})`}</span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>

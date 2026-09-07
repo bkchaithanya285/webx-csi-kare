@@ -255,6 +255,7 @@ export default function PaymentPage() {
           leadEmail: draft.leadEmail,
           leadName: draft.members[0]?.name || draft.leadName || "",
           leadRegNo: draft.members[0]?.regNo || draft.leadRegNo || "",
+          leaderIndex: typeof draft.leaderIndex === "number" ? draft.leaderIndex : 0,
           members: draft.members,
           utrNumber: cleanUtr,
           paymentStatus: "PENDING",

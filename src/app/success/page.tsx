@@ -10,6 +10,7 @@ import { CheckCircle2, Download, MessageSquare, ShieldCheck, Calendar, MapPin, U
 import * as htmlToImage from "html-to-image";
 import jsPDF from "jspdf";
 import { Student, getTeamByCodeOrEmail } from "@/lib/db";
+import { getTeamLeadInfo } from "@/lib/teamUtils";
 
 export default function SuccessPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function SuccessPage() {
     leadEmail: string;
     leadName?: string;
     leadRegNo?: string;
+    leaderIndex?: number;
     members: Student[];
     utrNumber: string;
     paymentStatus: string;
@@ -137,9 +139,12 @@ export default function SuccessPage() {
 
   if (!confirmed) return null;
 
-  const qrVerifyUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/verify/${confirmed.teamId}`
-    : `https://webx-hackathon.klu.ac.in/verify/${confirmed.teamId}`;
+  const origin = typeof window !== "undefined" && window.location.origin
+    ? window.location.origin
+    : "https://webx2026.vercel.app";
+  const qrVerifyUrl = `${origin}/verify/${confirmed.teamId}`;
+
+  const leadInfo = confirmed ? getTeamLeadInfo(confirmed as any) : null;
 
   return (
     <div className="w-full max-w-4xl mx-auto py-6 px-4 flex flex-col gap-8">
@@ -260,6 +265,14 @@ export default function SuccessPage() {
               <h3 className="text-2xl sm:text-4xl font-black text-white tracking-wide">{confirmed.teamName}</h3>
             </div>
 
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="px-2 py-0.5 rounded-md bg-red-600/30 border border-red-500/50 text-red-300 font-extrabold text-[10px] tracking-wider uppercase">
+                TEAM LEAD
+              </span>
+              <span className="text-sm text-white font-bold">{leadInfo?.leadName}</span>
+              <span className="text-xs text-gray-400 font-mono">({leadInfo?.leadEmail || confirmed.leadEmail})</span>
+            </div>
+
             <div className="flex items-baseline gap-3 mt-1">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">TEAM ID:</span>
               <span className="text-4xl sm:text-6xl font-black font-mono text-red-500 glow-text-red tracking-wider">
@@ -331,17 +344,34 @@ export default function SuccessPage() {
           </span>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {confirmed.members.map((m, i) => (
-              <div key={i} className="p-3 rounded-xl bg-slate-900/90 border border-white/10 flex items-center justify-between text-xs">
-                <div>
-                  <strong className="text-white block text-xs">{i + 1}. {m.name}</strong>
-                  <span className="text-gray-400 font-mono text-[10px]">{m.department} • Sec {m.section}</span>
+            {confirmed.members.map((m, i) => {
+              const isLead = i === leadInfo?.leaderIndex;
+              return (
+                <div
+                  key={i}
+                  className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                    isLead
+                      ? "bg-red-950/40 border-red-500/60 ring-1 ring-red-500/30 shadow-lg shadow-red-950/30"
+                      : "bg-slate-900/90 border-white/10"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <strong className="text-white block text-xs">{i + 1}. {m.name}</strong>
+                      {isLead && (
+                        <span className="px-1.5 py-0.5 rounded bg-red-600 text-[9px] font-black text-white uppercase tracking-wider shadow-sm">
+                          TEAM LEAD
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-gray-400 font-mono text-[10px]">{m.department} • Sec {m.section}</span>
+                  </div>
+                  <span className="font-mono text-red-400 font-bold px-2 py-0.5 rounded bg-red-950 border border-red-500/30 text-xs">
+                    {m.regNo}
+                  </span>
                 </div>
-                <span className="font-mono text-red-400 font-bold px-2 py-0.5 rounded bg-red-950 border border-red-500/30 text-xs">
-                  {m.regNo}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
