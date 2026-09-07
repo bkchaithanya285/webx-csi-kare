@@ -1815,8 +1815,9 @@ export default function AdminDashboardPage() {
                       <input
                         type="text"
                         value={editTeamName}
-                        onChange={(e) => setEditTeamName(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
+                        onChange={(e) => setEditTeamName(e.target.value.toUpperCase())}
+                        style={{ textTransform: "uppercase" }}
+                        className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white font-bold uppercase"
                         placeholder="Team Name"
                       />
                     </div>
@@ -1896,10 +1897,14 @@ export default function AdminDashboardPage() {
                                   value={m.name}
                                   onChange={(e) => {
                                     const updated = [...editMembers];
-                                    updated[idx] = { ...updated[idx], name: e.target.value };
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      name: e.target.value.toUpperCase().replace(/[^A-Z\s.]/g, ""),
+                                    };
                                     setEditMembers(updated);
                                   }}
-                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                  style={{ textTransform: "uppercase" }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white uppercase font-bold"
                                   placeholder="Student Full Name"
                                 />
                               </div>
@@ -1989,10 +1994,14 @@ export default function AdminDashboardPage() {
                                   value={m.section}
                                   onChange={(e) => {
                                     const updated = [...editMembers];
-                                    updated[idx] = { ...updated[idx], section: e.target.value };
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      section: e.target.value.toUpperCase().replace(/[^A-Z0-9\s-]/g, "").trim(),
+                                    };
                                     setEditMembers(updated);
                                   }}
-                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                  style={{ textTransform: "uppercase" }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white uppercase font-bold"
                                   placeholder="e.g. 23SD"
                                 />
                               </div>
@@ -2059,10 +2068,11 @@ export default function AdminDashboardPage() {
                                       value={m.roomNo || ""}
                                       onChange={(e) => {
                                         const updated = [...editMembers];
-                                        updated[idx] = { ...updated[idx], roomNo: e.target.value };
+                                        updated[idx] = { ...updated[idx], roomNo: e.target.value.toUpperCase().trim() };
                                         setEditMembers(updated);
                                       }}
-                                      className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                      style={{ textTransform: "uppercase" }}
+                                      className="px-3 py-2 rounded-lg glass-input text-xs text-white uppercase font-bold"
                                       placeholder="e.g. 435"
                                     />
                                   </div>
