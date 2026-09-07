@@ -6,7 +6,7 @@ import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
 import { CreditCard, Clock, Upload, CheckCircle2, AlertTriangle, ShieldCheck, Copy, Check, Crown } from "lucide-react";
 import { uploadToCloudinary, compressImageToDataUrl } from "@/lib/cloudinary";
-import { submitTeamRegistration, getSystemSettings, getNextSequentialTeamId, Student } from "@/lib/db";
+import { submitTeamRegistration, getSystemSettings, getNextSequentialTeamId, getCapacityStatus, Student } from "@/lib/db";
 
 export default function PaymentPage() {
   const router = useRouter();
@@ -189,13 +189,24 @@ export default function PaymentPage() {
     if (!draft) return;
 
     if (timeLeft <= 0) {
-      setError("Your 5-minute payment slot reservation has expired. Please return to registration to renew your slot.");
-      return;
+      try {
+        const cap = await getCapacityStatus();
+        if (!cap.registrationOpen || cap.isFull) {
+          setError("Your payment slot reservation expired and event capacity is full. Please contact organizers.");
+          return;
+        }
+        // Seamlessly extend slot by 5 minutes so user doesn't lose progress
+        const renewedExpiry = Date.now() + 5 * 60 * 1000;
+        sessionStorage.setItem("webx_payment_seat_lock_expiry", String(renewedExpiry));
+        setTimeLeft(300);
+      } catch (err) {
+        // Continue submission attempt gracefully
+      }
     }
 
     // UTR 12-digit numeric validation
-    const cleanUtr = utr.trim();
-    if (!/^\d{12}$/.test(cleanUtr)) {
+    const cleanUtr = utr.replace(/\D/g, "").trim();
+    if (cleanUtr.length !== 12) {
       setError("UTR / Transaction Reference Number must be EXACTLY 12 DIGITS.");
       return;
     }
@@ -524,6 +535,14 @@ export default function PaymentPage() {
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
+              </div>
+            )}
+
+            {/* Inline Error Alert Above Submit */}
+            {error && (
+              <div className="p-3.5 rounded-xl bg-red-950/90 border border-red-500/80 text-red-200 text-xs font-semibold flex items-center gap-2.5 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 

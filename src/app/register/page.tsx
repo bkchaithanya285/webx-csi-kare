@@ -35,6 +35,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [registrationClosed, setRegistrationClosed] = useState(false);
   const [memberRegErrors, setMemberRegErrors] = useState<{ [key: number]: string }>({});
+  const [validatingMember, setValidatingMember] = useState(false);
 
   const [members, setMembers] = useState<Student[]>([
     { name: "", regNo: "", department: "", year: "", section: "", mobile: "", gender: "", accommodation: "Day Scholar", email: "" },
@@ -108,20 +109,30 @@ export default function RegisterPage() {
   }, [router]);
 
   const updateMember = (index: number, field: keyof Student, value: any) => {
+    setError(""); // Smoothly clear any lingering errors on typing
     setMembers((prev) => {
       const next = [...prev];
       const m = { ...next[index], [field]: value };
 
-      // Auto-generate email when regNo is entered
+      // Auto-sanitize regNo: uppercase, alphanumeric only, no spaces
       if (field === "regNo") {
-        const cleanReg = String(value).trim().toUpperCase();
+        const cleanReg = String(value).replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
         m.regNo = cleanReg;
         m.email = cleanReg ? `${cleanReg.toLowerCase()}@klu.ac.in` : "";
       }
 
+      // Auto-sanitize mobile: numbers only, strip country code, max 10 digits
+      if (field === "mobile") {
+        let digits = String(value).replace(/\D/g, "");
+        if (digits.startsWith("91") && digits.length > 10) {
+          digits = digits.slice(2);
+        }
+        m.mobile = digits.slice(0, 10);
+      }
+
       // Auto-uppercase section so it is strictly in block letters
       if (field === "section") {
-        m.section = String(value).toUpperCase();
+        m.section = String(value).toUpperCase().replace(/\s+/g, "");
       }
 
       // Reset hostel if gender changes or if Day Scholar
@@ -269,11 +280,25 @@ export default function RegisterPage() {
       setError(`Duplicate registration number "${currentReg}" within your team! Each participant must be unique.`);
       return;
     }
-    const taken = await isStudentRegNoTaken(currentReg);
-    if (taken) {
-      setError(`Registration number "${currentReg}" is already registered in another team.`);
+    if (memberRegErrors[currIdx]) {
+      setError(memberRegErrors[currIdx]);
       return;
     }
+
+    setValidatingMember(true);
+    try {
+      const taken = await isStudentRegNoTaken(currentReg);
+      if (taken) {
+        setError(`Registration number "${currentReg}" is already registered in another team.`);
+        setValidatingMember(false);
+        return;
+      }
+    } catch (e) {
+      // Allow proceeding smoothly; final uniqueness verification runs on review and payment
+    } finally {
+      setValidatingMember(false);
+    }
+
     setActiveTab(activeTab + 1);
   };
 
@@ -304,6 +329,7 @@ export default function RegisterPage() {
   };
 
   const handleTabClick = async (num: number) => {
+    setError("");
     if (num > 0) {
       const clean = teamName.trim();
       if (!clean) {
@@ -876,11 +902,22 @@ export default function RegisterPage() {
               )}
             </div>
 
+            {/* Bottom Inline Error Alert */}
+            {error && (
+              <div className="p-3.5 rounded-xl bg-red-950/90 border border-red-500/80 text-red-200 text-xs font-semibold flex items-center gap-2.5 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
             {/* Navigation controls */}
             <div className="flex items-center justify-between pt-4 border-t border-white/10">
               <button
                 type="button"
-                onClick={() => setActiveTab(activeTab - 1)}
+                onClick={() => {
+                  setError("");
+                  setActiveTab(activeTab - 1);
+                }}
                 className="px-5 py-3 rounded-xl glass-btn-secondary font-bold text-xs uppercase flex items-center gap-2"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -890,16 +927,25 @@ export default function RegisterPage() {
               {activeTab < 4 ? (
                 <button
                   type="button"
-                  disabled={Boolean(memberRegErrors[activeTab - 1])}
+                  disabled={Boolean(memberRegErrors[activeTab - 1]) || validatingMember}
                   onClick={handleNextMember}
                   className={`px-6 py-3 rounded-xl font-bold text-xs uppercase flex items-center gap-2 transition-all ${
-                    Boolean(memberRegErrors[activeTab - 1])
+                    Boolean(memberRegErrors[activeTab - 1]) || validatingMember
                       ? "bg-red-950/40 text-red-400 border border-red-500/30 cursor-not-allowed shadow-none"
                       : "glass-btn-primary"
                   }`}
                 >
-                  <span>Next Member</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {validatingMember ? (
+                    <>
+                      <Clock className="w-4 h-4 animate-spin" />
+                      <span>Checking...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Next Member</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               ) : (
                 <button
