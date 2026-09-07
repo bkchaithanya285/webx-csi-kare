@@ -102,6 +102,11 @@ export default function RegisterPage() {
         m.email = cleanReg ? `${cleanReg.toLowerCase()}@klu.ac.in` : "";
       }
 
+      // Auto-uppercase section so it is strictly in block letters
+      if (field === "section") {
+        m.section = String(value).toUpperCase();
+      }
+
       // Reset hostel if gender changes or if Day Scholar
       if (field === "gender") {
         delete m.hostel;
@@ -266,6 +271,9 @@ export default function RegisterPage() {
         JSON.stringify({
           teamName: teamName.trim(),
           leadEmail,
+          leadName: members[0]?.name || "",
+          leadRegNo: members[0]?.regNo || "",
+          leaderIndex: 0,
           members,
           reservationId: resId,
           expiresAt: expiryTime,
@@ -374,7 +382,7 @@ export default function RegisterPage() {
                   : "text-gray-400 hover:text-white"
               }`}
             >
-              <span>{`Mem ${num}`}</span>
+              <span>{num === 1 ? "Mem 1 (Leader)" : `Mem ${num}`}</span>
             </button>
           ))}
         </div>
@@ -415,7 +423,7 @@ export default function RegisterPage() {
               onClick={() => setActiveTab(1)}
               className="w-full py-4 rounded-xl glass-btn-primary font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2"
             >
-              <span>Proceed to Member 1 Details</span>
+              <span>Proceed to Member 1 (Team Leader) Details</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -428,8 +436,13 @@ export default function RegisterPage() {
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
                   <User className="w-5 h-5" />
-                  <span>{`PARTICIPANT ${activeTab} OF 4 (MEMBER ${activeTab})`}</span>
+                  <span>{activeTab === 1 ? "MEMBER 1 (TEAM LEADER)" : `PARTICIPANT ${activeTab} OF 4`}</span>
                 </h3>
+                {activeTab === 1 && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-extrabold tracking-wider uppercase">
+                    TEAM LEADER
+                  </span>
+                )}
               </div>
               <span className="text-xs font-semibold text-gray-400">
                 Member Fee: ₹350
@@ -540,8 +553,8 @@ export default function RegisterPage() {
                   type="text"
                   placeholder="e.g. 24S10"
                   value={members[activeTab - 1].section}
-                  onChange={(e) => updateMember(activeTab - 1, "section", e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl glass-input text-sm text-white uppercase"
+                  onChange={(e) => updateMember(activeTab - 1, "section", e.target.value.toUpperCase())}
+                  className="w-full px-4 py-3 rounded-xl glass-input text-sm text-white uppercase font-mono"
                 />
               </div>
 

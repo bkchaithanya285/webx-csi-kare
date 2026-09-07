@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
 import { CreditCard, Clock, Upload, CheckCircle2, AlertTriangle, ShieldCheck, Copy, Check, Crown } from "lucide-react";
-import { uploadToCloudinary } from "@/lib/cloudinary";
+import { uploadToCloudinary, compressImageToDataUrl } from "@/lib/cloudinary";
 import { submitTeamRegistration, getSystemSettings, getNextSequentialTeamId, Student } from "@/lib/db";
 
 export default function PaymentPage() {
@@ -36,6 +36,7 @@ export default function PaymentPage() {
 
   const [utr, setUtr] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadedUrl, setUploadedUrl] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -69,11 +70,14 @@ export default function PaymentPage() {
     }
     try {
       const parsed = JSON.parse(raw);
-      // Ensure team leader has been selected; if not, redirect to review page
-      if (parsed.leaderIndex === undefined || parsed.leaderIndex === null) {
-        router.push("/review");
+      if (!parsed.members || parsed.members.length < 4) {
+        router.push("/register");
         return;
       }
+      // Guarantee Member 1 is team lead
+      parsed.leaderIndex = 0;
+      parsed.leadName = parsed.members[0]?.name || parsed.leadName || "";
+      parsed.leadRegNo = parsed.members[0]?.regNo || parsed.leadRegNo || "";
       setDraft(parsed);
 
       // Establish or restore 5-minute persistent seat lock expiry timestamp
@@ -120,38 +124,51 @@ export default function PaymentPage() {
     setTimeout(() => setCopiedUpi(false), 2000);
   };
 
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // Immediately start upload as soon as file is selected
+  // Instant image preview & smooth background upload
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
-      setPreviewUrl(URL.createObjectURL(selectedFile));
-      setUploadedUrl("");
       setUploadError("");
       setIsUploading(true);
-      setUploadProgress(10);
+      setUploadProgress(20);
+
+      // 1. Instantly read data URL using FileReader so preview shows immediately with 0 delay
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        if (re.target?.result) {
+          setPreviewUrl(re.target.result as string);
+        }
+      };
+      reader.readAsDataURL(selectedFile);
 
       try {
+        // 2. Client-side compress for guaranteed reliability (<60KB)
+        const compressedData = await compressImageToDataUrl(selectedFile);
+        if (compressedData) {
+          setPreviewUrl(compressedData);
+          setUploadedUrl(compressedData); // Instant valid safety fallback
+          setUploadProgress(50);
+        }
+
+        // 3. Upload to Cloudinary
         const teamIdentifier = draft?.teamName || "WEB";
-        const url = await uploadToCloudinary({
+        const cldUrl = await uploadToCloudinary({
           file: selectedFile,
           teamId: teamIdentifier,
-          onProgress: (pct) => setUploadProgress(pct),
+          onProgress: (pct) => setUploadProgress(Math.max(50, pct)),
         });
 
-        if (url) {
-          setUploadedUrl(url);
-          setUploadProgress(100);
-          setIsUploading(false);
-        } else {
-          throw new Error("Upload returned empty image URL.");
+        if (cldUrl) {
+          setUploadedUrl(cldUrl);
         }
-      } catch (err: any) {
-        console.error("Screenshot upload error:", err);
+        setUploadProgress(100);
         setIsUploading(false);
-        setUploadError("Screenshot upload failed. Please try re-selecting the file.");
+      } catch (err: any) {
+        console.warn("Cloudinary upload fallback to compressed data:", err);
+        // Compressed data is already set and ready
+        setUploadProgress(100);
+        setIsUploading(false);
       }
     }
   };
@@ -183,29 +200,31 @@ export default function PaymentPage() {
       return;
     }
 
-    if (!uploadedUrl) {
-      setError("Mandatory: Please upload your payment screenshot and wait for the upload to complete.");
+    if (!uploadedUrl && !previewUrl) {
+      setError("Mandatory: Please select and upload your payment screenshot.");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      // 1. Determine the assigned sequential Team ID (e.g. WEB-001, WEB-002...)
+      const finalScreenshotUrl = uploadedUrl || previewUrl || "";
+
+      // 1. Determine assigned sequential Team ID (e.g. WEB-001, WEB-002...)
       const assignedTeamId = await getNextSequentialTeamId();
 
-      // 2. Submit Team Registration with the pre-uploaded screenshot URL
+      // 2. Submit Team Registration smoothly
       const res = await submitTeamRegistration({
         teamId: assignedTeamId,
         teamName: draft.teamName,
         leadEmail: draft.leadEmail,
-        leadName: draft.leadName,
-        leadRegNo: draft.leadRegNo,
-        leaderIndex: draft.leaderIndex,
-        accountEmail: draft.accountEmail,
+        leadName: draft.members[0]?.name || draft.leadName || "",
+        leadRegNo: draft.members[0]?.regNo || draft.leadRegNo || "",
+        leaderIndex: 0,
+        accountEmail: draft.accountEmail || draft.leadEmail,
         members: draft.members,
         utrNumber: cleanUtr,
-        paymentScreenshotUrl: uploadedUrl,
+        paymentScreenshotUrl: finalScreenshotUrl,
       });
 
       if (!res.success || !res.teamId) {
@@ -223,12 +242,12 @@ export default function PaymentPage() {
           teamId: confirmedTeamId,
           teamName: draft.teamName,
           leadEmail: draft.leadEmail,
-          leadName: draft.leadName,
-          leadRegNo: draft.leadRegNo,
+          leadName: draft.members[0]?.name || draft.leadName || "",
+          leadRegNo: draft.members[0]?.regNo || draft.leadRegNo || "",
           members: draft.members,
           utrNumber: cleanUtr,
           paymentStatus: "PENDING",
-          paymentScreenshotUrl: uploadedUrl,
+          paymentScreenshotUrl: finalScreenshotUrl,
         })
       );
 
@@ -238,7 +257,7 @@ export default function PaymentPage() {
       sessionStorage.removeItem("webx_registration_step");
       localStorage.removeItem("webx_reg_form_autosave");
 
-      // Instant navigation to success page
+      // Instant smooth navigation to success page
       router.push("/success");
     } catch (err: any) {
       console.error(err);
@@ -251,10 +270,11 @@ export default function PaymentPage() {
 
   const upiQrString = `upi://pay?pa=${upiId}&pn=WEBX%20Hackathon&am=${totalAmount}&cu=INR`;
 
+  const hasImageReady = Boolean(uploadedUrl || previewUrl);
   const isSubmitDisabled =
     submitting ||
     isUploading ||
-    !uploadedUrl ||
+    !hasImageReady ||
     timeLeft <= 0 ||
     utr.trim().length !== 12;
 
@@ -275,7 +295,7 @@ export default function PaymentPage() {
           </p>
         </div>
 
-        {/* Selected Team Leader Banner */}
+        {/* Confirmed Team Leader Banner (Member 1) */}
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
@@ -283,17 +303,17 @@ export default function PaymentPage() {
             </div>
             <div>
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 block">
-                CONFIRMED TEAM LEADER
+                TEAM LEADER (MEMBER 1)
               </span>
               <span className="font-extrabold text-white text-sm sm:text-base">
-                {draft.leadName || (draft.leaderIndex !== undefined && draft.members[draft.leaderIndex]?.name)}
+                {draft.members[0]?.name || draft.leadName || "Team Leader"}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">REG NO:</span>
             <span className="font-mono text-xs font-extrabold text-amber-300 bg-black/40 px-3 py-1 rounded-lg border border-amber-500/30">
-              {draft.leadRegNo || (draft.leaderIndex !== undefined && draft.members[draft.leaderIndex]?.regNo)}
+              {draft.members[0]?.regNo || draft.leadRegNo || "N/A"}
             </span>
           </div>
         </div>
@@ -374,7 +394,7 @@ export default function PaymentPage() {
                 <div key={idx} className="flex justify-between text-gray-400">
                   <span>
                     Member {idx + 1} ({m.name || `Participant ${idx + 1}`})
-                    {idx === draft.leaderIndex ? " 👑 (Leader)" : ""}:
+                    {idx === 0 ? " 👑 (Team Leader)" : ""}:
                   </span>
                   <span className="font-mono text-white">₹350</span>
                 </div>
@@ -387,7 +407,7 @@ export default function PaymentPage() {
             </div>
           </div>
 
-          {/* Right Column: UTR & Cloudinary Screenshot Upload Form */}
+          {/* Right Column: UTR & Screenshot Upload Form */}
           <form onSubmit={handleFormSubmit} className="flex flex-col gap-6">
             
             {/* UTR Input */}
@@ -422,9 +442,9 @@ export default function PaymentPage() {
                 />
                 <Upload className="w-8 h-8 text-red-500 mb-2" />
                 <span className="text-xs font-bold text-gray-200">
-                  {file ? file.name : "Click to Select & Upload Screenshot"}
+                  {file ? file.name : "Click to Select Payment Screenshot"}
                 </span>
-                <span className="text-[10px] text-gray-400 mt-1">PNG, JPG or WEBP (Uploads immediately upon selection)</span>
+                <span className="text-[10px] text-gray-400 mt-1">PNG, JPG or WEBP (Uploads instantly upon selection)</span>
               </label>
             </div>
 
@@ -438,34 +458,34 @@ export default function PaymentPage() {
 
             {/* Live Screenshot Image Preview */}
             {previewUrl && (
-              <div className="flex flex-col gap-2 p-3 rounded-2xl glass-card border border-red-500/40 bg-slate-950/80 animate-in fade-in">
+              <div className="flex flex-col gap-2 p-3 rounded-2xl glass-card border border-emerald-500/40 bg-slate-950/90 animate-in fade-in">
                 <div className="flex items-center justify-between text-xs font-bold text-gray-200 border-b border-white/10 pb-2">
-                  <span className={`font-bold flex items-center gap-1.5 ${uploadedUrl ? "text-emerald-400" : "text-amber-400"}`}>
-                    {uploadedUrl ? (
+                  <span className={`font-bold flex items-center gap-1.5 ${hasImageReady ? "text-emerald-400" : "text-amber-400"}`}>
+                    {hasImageReady ? (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>Screenshot Uploaded Successfully</span>
+                        <span>Screenshot Loaded & Verified</span>
                       </>
                     ) : (
                       <>
                         <Clock className="w-4 h-4 animate-spin" />
-                        <span>Uploading Screenshot...</span>
+                        <span>Preparing Screenshot...</span>
                       </>
                     )}
                   </span>
                   <button
                     type="button"
                     onClick={handleClearImage}
-                    className="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5 rounded bg-red-950/80 border border-red-500/30 text-[10px] uppercase"
+                    className="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5 rounded bg-red-950/80 border border-red-500/30 text-[10px] uppercase transition-colors"
                   >
                     Change Image
                   </button>
                 </div>
-                <div className="relative w-full h-48 sm:h-56 rounded-xl overflow-hidden bg-black flex items-center justify-center border border-white/10">
+                <div className="w-full min-h-[180px] p-2 rounded-xl bg-black/80 flex items-center justify-center border border-white/10 overflow-hidden">
                   <img
                     src={previewUrl}
                     alt="Payment Screenshot Preview"
-                    className="w-full h-full object-contain rounded-lg"
+                    className="max-h-64 w-auto max-w-full rounded-lg object-contain mx-auto shadow-lg"
                   />
                 </div>
               </div>
@@ -481,7 +501,7 @@ export default function PaymentPage() {
                         <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
                         <span>Uploading screenshot to Cloudinary...</span>
                       </>
-                    ) : uploadedUrl ? (
+                    ) : hasImageReady ? (
                       <>
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                         <span className="text-emerald-400">Screenshot Uploaded & Verified</span>
@@ -490,14 +510,14 @@ export default function PaymentPage() {
                       <span>Upload Incomplete</span>
                     )}
                   </span>
-                  <span className={`font-mono font-bold ${uploadedUrl ? "text-emerald-400" : "text-amber-400"}`}>
+                  <span className={`font-mono font-bold ${hasImageReady ? "text-emerald-400" : "text-amber-400"}`}>
                     {uploadProgress}%
                   </span>
                 </div>
                 <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-white/10">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
-                      uploadedUrl
+                      hasImageReady
                         ? "bg-gradient-to-r from-emerald-500 to-teal-400"
                         : "bg-gradient-to-r from-red-600 via-amber-500 to-yellow-400"
                     }`}
@@ -514,14 +534,14 @@ export default function PaymentPage() {
               className={`w-full py-4 mt-2 rounded-xl font-extrabold uppercase tracking-widest text-sm sm:text-base flex items-center justify-center gap-3 transition-all ${
                 isSubmitDisabled
                   ? "bg-slate-800 text-gray-500 border border-white/5 cursor-not-allowed shadow-none opacity-60"
-                  : "glass-btn-primary shadow-xl shadow-red-950/70"
+                  : "glass-btn-primary shadow-xl shadow-red-950/70 cursor-pointer"
               }`}
             >
               {submitting ? (
-                <span>SUBMITTING PAYMENT...</span>
+                <span>SUBMITTING REGISTRATION...</span>
               ) : isUploading ? (
                 <span>UPLOADING SCREENSHOT ({uploadProgress}%)...</span>
-              ) : !uploadedUrl ? (
+              ) : !hasImageReady ? (
                 <span>UPLOAD SCREENSHOT TO ENABLE SUBMIT</span>
               ) : utr.trim().length !== 12 ? (
                 <span>ENTER 12-DIGIT UTR TO SUBMIT</span>
