@@ -10,6 +10,20 @@ const YEARS = ["II", "III", "IV"];
 const BOYS_HOSTELS = ["MH-1", "MH-2", "MH-3", "MH-4", "MH-5", "MH-6", "MH-7"];
 const GIRLS_HOSTELS = ["LH-1", "LH-2", "LH-3", "LH-4"];
 
+// Sanitizes team name: uppercase block letters only, no emojis, no double spaces
+const formatTeamName = (val: string): string => {
+  return val
+    .toUpperCase()
+    // Strip all emoji characters and pictographs
+    .replace(/\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji}|\p{Symbol}/gu, "")
+    // Keep only alphanumeric characters, spaces, and safe punctuation
+    .replace(/[^\w\s\-&]/g, "")
+    // Disallow multiple consecutive spaces
+    .replace(/\s{2,}/g, " ")
+    // Disallow leading whitespace
+    .replace(/^\s+/, "");
+};
+
 export default function RegisterPage() {
   const router = useRouter();
   const [teamName, setTeamName] = useState("");
@@ -190,7 +204,7 @@ export default function RegisterPage() {
   const handleProceedToMember1 = async () => {
     setError("");
     setTeamNameError("");
-    const clean = teamName.trim();
+    const clean = formatTeamName(teamName).trim();
     if (!clean) {
       setTeamNameError("Team Name is required.");
       return;
@@ -247,7 +261,7 @@ export default function RegisterPage() {
   const handleReviewProceed = async () => {
     setError("");
 
-    const cleanTeam = teamName.trim().toUpperCase().replace(/\s{2,}/g, " ");
+    const cleanTeam = formatTeamName(teamName).trim();
     if (!cleanTeam) {
       setError("Please provide a unique Team Name in block letters.");
       setActiveTab(0);
@@ -486,10 +500,7 @@ export default function RegisterPage() {
                   placeholder="E.G. CYBERWEB INNOVATORS"
                   value={teamName}
                   onChange={(e) => {
-                    const formatted = e.target.value
-                      .toUpperCase()
-                      .replace(/\s{2,}/g, " ")
-                      .replace(/^\s+/, "");
+                    const formatted = formatTeamName(e.target.value);
                     setTeamName(formatted);
                     if (teamNameError) setTeamNameError("");
                   }}
