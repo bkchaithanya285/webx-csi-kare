@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users, User, Building, Phone, Mail, Home, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, ShieldCheck, ShieldAlert } from "lucide-react";
-import { Student, checkTeamUniqueness, reserveTeamSlot, getTeamByCodeOrEmail, getCapacityStatus } from "@/lib/db";
+import { Users, User, Building, Phone, Mail, Home, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, ShieldCheck, ShieldAlert, Clock } from "lucide-react";
+import { Student, checkTeamUniqueness, reserveTeamSlot, getTeamByCodeOrEmail, getCapacityStatus, isTeamNameTaken } from "@/lib/db";
 
 const DEPARTMENTS = ["CSE", "ECE", "IT", "EEE", "MECH", "CIVIL", "BIO", "Others"];
 const YEARS = ["II", "III", "IV"];
@@ -13,6 +13,8 @@ const GIRLS_HOSTELS = ["LH-1", "LH-2", "LH-3", "LH-4"];
 export default function RegisterPage() {
   const router = useRouter();
   const [teamName, setTeamName] = useState("");
+  const [teamNameStatus, setTeamNameStatus] = useState<"idle" | "checking" | "taken" | "available">("idle");
+  const [teamNameError, setTeamNameError] = useState("");
   const [activeTab, setActiveTab] = useState<number>(0); // 0: Team Name, 1-4: Member 1..4
   const [leadEmail, setLeadEmail] = useState("");
   const [error, setError] = useState("");
@@ -156,6 +158,77 @@ export default function RegisterPage() {
       );
     } catch (e) {}
   }, [teamName, activeTab, members, leadEmail]);
+
+  // Real-time Debounced Team Name Uniqueness Check
+  useEffect(() => {
+    const clean = teamName.trim();
+    if (!clean || clean.length < 2) {
+      setTeamNameStatus("idle");
+      setTeamNameError("");
+      return;
+    }
+
+    setTeamNameStatus("checking");
+    const timer = setTimeout(async () => {
+      try {
+        const taken = await isTeamNameTaken(clean);
+        if (taken) {
+          setTeamNameStatus("taken");
+          setTeamNameError("Change the team name, it is already taken.");
+        } else {
+          setTeamNameStatus("available");
+          setTeamNameError("");
+        }
+      } catch (e) {
+        setTeamNameStatus("idle");
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [teamName]);
+
+  const handleProceedToMember1 = async () => {
+    setError("");
+    setTeamNameError("");
+    const clean = teamName.trim();
+    if (!clean) {
+      setTeamNameError("Team Name is required.");
+      return;
+    }
+    if (clean.length < 2) {
+      setTeamNameError("Team Name must be at least 2 characters long.");
+      return;
+    }
+
+    setTeamNameStatus("checking");
+    const taken = await isTeamNameTaken(clean);
+    if (taken) {
+      setTeamNameStatus("taken");
+      setTeamNameError("Change the team name, it is already taken.");
+      return;
+    }
+
+    setTeamNameStatus("available");
+    setTeamNameError("");
+    setActiveTab(1);
+  };
+
+  const handleTabClick = async (num: number) => {
+    if (num > 0) {
+      const clean = teamName.trim();
+      if (!clean) {
+        setTeamNameError("Please enter a unique Team Name first.");
+        setActiveTab(0);
+        return;
+      }
+      if (teamNameStatus === "taken") {
+        setTeamNameError("Change the team name, it is already taken.");
+        setActiveTab(0);
+        return;
+      }
+    }
+    setActiveTab(num);
+  };
 
   const handleResetDraft = () => {
     if (confirm("Clear all entered team details and start fresh?")) {
@@ -363,7 +436,7 @@ export default function RegisterPage() {
         {/* Tab Navigation: Team Name, Member 1, Member 2, Member 3, Member 4 */}
         <div className="grid grid-cols-5 gap-2 bg-slate-900/80 p-2 rounded-2xl border border-white/10 text-xs sm:text-sm font-bold">
           <button
-            onClick={() => setActiveTab(0)}
+            onClick={() => handleTabClick(0)}
             className={`py-3 rounded-xl transition-all ${
               activeTab === 0
                 ? "bg-red-600 text-white shadow-lg shadow-red-950/60"
@@ -375,7 +448,7 @@ export default function RegisterPage() {
           {[1, 2, 3, 4].map((num) => (
             <button
               key={num}
-              onClick={() => setActiveTab(num)}
+              onClick={() => handleTabClick(num)}
               className={`py-3 rounded-xl transition-all flex items-center justify-center gap-1 ${
                 activeTab === num
                   ? "bg-red-600 text-white shadow-lg shadow-red-950/60"
@@ -391,8 +464,18 @@ export default function RegisterPage() {
         {activeTab === 0 && (
           <div className="flex flex-col gap-6 animate-in fade-in">
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-extrabold uppercase tracking-wider text-gray-200">
-                GLOBALLY UNIQUE TEAM NAME <span className="text-red-500">*</span>
+              <label className="text-sm font-extrabold uppercase tracking-wider text-gray-200 flex items-center justify-between">
+                <span>GLOBALLY UNIQUE TEAM NAME <span className="text-red-500">*</span></span>
+                {teamNameStatus === "checking" && (
+                  <span className="text-xs text-amber-400 font-semibold flex items-center gap-1 lowercase">
+                    <Clock className="w-3.5 h-3.5 animate-spin" /> checking...
+                  </span>
+                )}
+                {teamNameStatus === "available" && (
+                  <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5" /> Available
+                  </span>
+                )}
               </label>
               <div className="relative">
                 <Users className="w-5 h-5 text-gray-400 absolute left-4 top-4" />
@@ -401,11 +484,38 @@ export default function RegisterPage() {
                   required
                   placeholder="e.g. CyberWeb Innovators"
                   value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 rounded-xl glass-input text-base text-white placeholder-gray-500 font-semibold"
+                  onChange={(e) => {
+                    setTeamName(e.target.value);
+                    if (teamNameError) setTeamNameError("");
+                  }}
+                  className={`w-full pl-12 pr-12 py-3.5 rounded-xl glass-input text-base text-white placeholder-gray-500 font-semibold transition-all ${
+                    teamNameStatus === "taken" || teamNameError
+                      ? "border-red-500 ring-2 ring-red-500/40 bg-red-950/20 text-red-200"
+                      : teamNameStatus === "available"
+                      ? "border-emerald-500/60 ring-2 ring-emerald-500/30"
+                      : ""
+                  }`}
                 />
+                {teamNameStatus === "checking" && (
+                  <Clock className="w-5 h-5 text-amber-400 absolute right-4 top-4 animate-spin" />
+                )}
+                {teamNameStatus === "available" && (
+                  <CheckCircle className="w-5 h-5 text-emerald-400 absolute right-4 top-4 animate-in zoom-in-50" />
+                )}
+                {(teamNameStatus === "taken" || Boolean(teamNameError)) && (
+                  <AlertTriangle className="w-5 h-5 text-red-400 absolute right-4 top-4 animate-in zoom-in-50" />
+                )}
               </div>
-              <span className="text-xs text-gray-400">Team names are checked globally and must be unique.</span>
+
+              {/* Real-time duplicate error banner */}
+              {(teamNameStatus === "taken" || Boolean(teamNameError)) ? (
+                <div className="p-3 rounded-xl bg-red-950/90 border border-red-500/80 text-red-200 text-xs sm:text-sm font-bold flex items-center gap-2.5 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{teamNameError || "Change the team name, it is already taken."}</span>
+                </div>
+              ) : (
+                <span className="text-xs text-gray-400">Team names are checked globally and must be unique.</span>
+              )}
             </div>
 
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -420,8 +530,13 @@ export default function RegisterPage() {
 
             <button
               type="button"
-              onClick={() => setActiveTab(1)}
-              className="w-full py-4 rounded-xl glass-btn-primary font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2"
+              disabled={teamNameStatus === "taken" || teamNameStatus === "checking"}
+              onClick={handleProceedToMember1}
+              className={`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all ${
+                teamNameStatus === "taken"
+                  ? "bg-red-950/50 text-red-300 border border-red-500/30 cursor-not-allowed shadow-none"
+                  : "glass-btn-primary"
+              }`}
             >
               <span>Proceed to Member 1 (Team Leader) Details</span>
               <ArrowRight className="w-4 h-4" />

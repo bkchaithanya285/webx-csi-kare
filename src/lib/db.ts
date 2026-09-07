@@ -337,26 +337,46 @@ export async function reserveTeamSlot(teamName: string, leadEmail: string): Prom
   }
 }
 
+// Real-time Check for Globally Unique Team Name (Case-insensitive)
+export async function isTeamNameTaken(teamName: string): Promise<boolean> {
+  const clean = teamName.trim().toLowerCase();
+  if (!clean || clean.length < 2) return false;
+
+  try {
+    const teamsSnap = await withTimeout(getDocs(collection(db, "teams")), 2000, null);
+    if (teamsSnap && !teamsSnap.empty) {
+      for (const d of teamsSnap.docs) {
+        const data = d.data() as TeamData;
+        if (data.teamName && data.teamName.trim().toLowerCase() === clean) {
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch (error: any) {
+    console.warn("isTeamNameTaken error:", error);
+    return false;
+  }
+}
+
 // Check Duplicate Registration Numbers & Unique Team Name
 export async function checkTeamUniqueness(teamName: string, regNumbers: string[]): Promise<{ valid: boolean; error?: string }> {
   try {
-    const qTeam = query(collection(db, "teams"), where("teamName", "==", teamName.trim()));
-    const teamSnap = await withTimeout(getDocs(qTeam), 1500, null);
-    if (teamSnap && !teamSnap.empty) {
-      return { valid: false, error: `Team name "${teamName}" is already taken.` };
-    }
-
-    const teamsSnap = await withTimeout(getDocs(collection(db, "teams")), 1500, null);
+    const cleanTeam = teamName.trim().toLowerCase();
+    const teamsSnap = await withTimeout(getDocs(collection(db, "teams")), 2000, null);
     if (teamsSnap) {
       const existingRegNos = new Set<string>();
-      teamsSnap.forEach((docSnap) => {
+      for (const docSnap of teamsSnap.docs) {
         const data = docSnap.data() as TeamData;
+        if (data.teamName && data.teamName.trim().toLowerCase() === cleanTeam) {
+          return { valid: false, error: "Change the team name, it is already taken." };
+        }
         if (data.members) {
           data.members.forEach((m) => {
             if (m.regNo) existingRegNos.add(m.regNo.trim().toUpperCase());
           });
         }
-      });
+      }
 
       for (const regNo of regNumbers) {
         const normalized = regNo.trim().toUpperCase();
