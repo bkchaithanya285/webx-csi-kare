@@ -583,6 +583,9 @@ export async function submitTeamRegistration(
         .trim(),
       regNo: (m.regNo || "").trim().toUpperCase(),
       section: (m.section || "").trim().toUpperCase(),
+      accommodation: (m.accommodation === "Hosteller" ? "Hosteller" : "Day Scholar") as "Day Scholar" | "Hosteller",
+      hostel: m.accommodation === "Hosteller" ? (m.hostel || "").trim() : "",
+      roomNo: m.accommodation === "Hosteller" ? (m.roomNo || "").trim().toUpperCase() : "",
     }));
 
     const newTeam: TeamData = {
@@ -1004,9 +1007,9 @@ export async function adminCreateTeamRegistration(
       year: (m.year || "II").trim(),
       mobile: (m.mobile || "").trim(),
       gender: (m.gender || "Male").trim(),
-      accommodation: m.accommodation === "Hosteller" ? "Hosteller" : "Day Scholar",
+      accommodation: (m.accommodation === "Hosteller" ? "Hosteller" : "Day Scholar") as "Day Scholar" | "Hosteller",
       hostel: m.accommodation === "Hosteller" ? (m.hostel || "").trim() : "",
-      roomNo: m.accommodation === "Hosteller" ? (m.roomNo || "").trim() : "",
+      roomNo: m.accommodation === "Hosteller" ? (m.roomNo || "").trim().toUpperCase() : "",
     }));
 
     // Designate leader

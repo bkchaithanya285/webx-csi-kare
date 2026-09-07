@@ -354,9 +354,9 @@ export default function AdminDashboardPage() {
         mobile: m.mobile.trim(),
         email: m.email.trim().toLowerCase(),
         gender: m.gender,
-        accommodation: m.accommodation,
-        hostel: m.hostel?.trim() || "",
-        roomNo: m.roomNo?.trim() || "",
+        accommodation: (m.accommodation === "Hosteller" ? "Hosteller" : "Day Scholar") as "Day Scholar" | "Hosteller",
+        hostel: m.accommodation === "Hosteller" ? (m.hostel?.trim() || "") : "",
+        roomNo: m.accommodation === "Hosteller" ? (m.roomNo?.trim().toUpperCase() || "") : "",
       }));
 
       const updates: Partial<TeamData> = {
@@ -2019,8 +2019,13 @@ export default function AdminDashboardPage() {
                                 <select
                                   value={m.accommodation}
                                   onChange={(e) => {
+                                    const val = e.target.value as any;
                                     const updated = [...editMembers];
-                                    updated[idx] = { ...updated[idx], accommodation: e.target.value as any };
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      accommodation: val,
+                                      ...(val === "Day Scholar" ? { roomNo: "", hostel: "" } : {}),
+                                    };
                                     setEditMembers(updated);
                                   }}
                                   className="px-3 py-2 rounded-lg glass-input text-xs text-white bg-slate-900 border border-white/10"

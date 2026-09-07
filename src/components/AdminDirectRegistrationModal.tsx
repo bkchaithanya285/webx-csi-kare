@@ -159,6 +159,15 @@ export function AdminDirectRegistrationModal({
         m.roomNo = String(value).toUpperCase().trim();
       }
 
+      // Automatically remove room number and hostel when updating from Hosteller to Day Scholar
+      if (field === "accommodation") {
+        m.accommodation = value;
+        if (value === "Day Scholar") {
+          m.roomNo = "";
+          m.hostel = "";
+        }
+      }
+
       copy[index] = m;
       return copy;
     });
