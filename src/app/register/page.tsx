@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Users, User, Building, Phone, Mail, Home, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, ShieldCheck, ShieldAlert, Clock } from "lucide-react";
-import { Student, checkTeamUniqueness, reserveTeamSlot, getTeamByCodeOrEmail, getCapacityStatus, isTeamNameTaken } from "@/lib/db";
+import { Student, checkTeamUniqueness, reserveTeamSlot, getTeamByCodeOrEmail, getCapacityStatus, isTeamNameTaken, isStudentRegNoTaken } from "@/lib/db";
 
 const DEPARTMENTS = ["CSE", "ECE", "IT", "EEE", "MECH", "CIVIL", "BIO", "Others"];
 const YEARS = ["II", "III", "IV"];
@@ -34,6 +34,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [registrationClosed, setRegistrationClosed] = useState(false);
+  const [memberRegErrors, setMemberRegErrors] = useState<{ [key: number]: string }>({});
 
   const [members, setMembers] = useState<Student[]>([
     { name: "", regNo: "", department: "", year: "", section: "", mobile: "", gender: "", accommodation: "Day Scholar", email: "" },
@@ -200,6 +201,81 @@ export default function RegisterPage() {
 
     return () => clearTimeout(timer);
   }, [teamName]);
+
+  // Real-time Check for Intra-Team and Cross-Team Duplicate Registration Numbers
+  const currentMemberIdx = activeTab >= 1 && activeTab <= 4 ? activeTab - 1 : -1;
+  const currentMemberReg = currentMemberIdx >= 0 ? (members[currentMemberIdx]?.regNo || "").trim().toUpperCase() : "";
+
+  useEffect(() => {
+    if (currentMemberIdx < 0) return;
+    if (!currentMemberReg || currentMemberReg.length < 5) {
+      setMemberRegErrors((prev) => {
+        if (!prev[currentMemberIdx]) return prev;
+        const next = { ...prev };
+        delete next[currentMemberIdx];
+        return next;
+      });
+      return;
+    }
+
+    // 1. Instant check: Intra-team duplicate within current entered members
+    const isDuplicateInTeam = members.some(
+      (m, idx) => idx !== currentMemberIdx && (m.regNo || "").trim().toUpperCase() === currentMemberReg
+    );
+    if (isDuplicateInTeam) {
+      setMemberRegErrors((prev) => ({
+        ...prev,
+        [currentMemberIdx]: `Duplicate registration number within your team! Each participant must be unique.`,
+      }));
+      return;
+    }
+
+    // 2. Debounced check: Cross-team duplicate in database
+    const timer = setTimeout(async () => {
+      try {
+        const taken = await isStudentRegNoTaken(currentMemberReg);
+        if (taken) {
+          setMemberRegErrors((prev) => ({
+            ...prev,
+            [currentMemberIdx]: `Registration number "${currentMemberReg}" is already registered in another team.`,
+          }));
+        } else {
+          setMemberRegErrors((prev) => {
+            if (!prev[currentMemberIdx]) return prev;
+            const next = { ...prev };
+            delete next[currentMemberIdx];
+            return next;
+          });
+        }
+      } catch (e) {}
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [currentMemberReg, currentMemberIdx, members]);
+
+  const handleNextMember = async () => {
+    setError("");
+    const currIdx = activeTab - 1;
+    const err = validateMember(members[currIdx], currIdx);
+    if (err) {
+      setError(err);
+      return;
+    }
+    const currentReg = (members[currIdx]?.regNo || "").trim().toUpperCase();
+    const isDuplicateWithin = members.some(
+      (m, idx) => idx !== currIdx && (m.regNo || "").trim().toUpperCase() === currentReg
+    );
+    if (isDuplicateWithin) {
+      setError(`Duplicate registration number "${currentReg}" within your team! Each participant must be unique.`);
+      return;
+    }
+    const taken = await isStudentRegNoTaken(currentReg);
+    if (taken) {
+      setError(`Registration number "${currentReg}" is already registered in another team.`);
+      return;
+    }
+    setActiveTab(activeTab + 1);
+  };
 
   const handleProceedToMember1 = async () => {
     setError("");
@@ -600,13 +676,26 @@ export default function RegisterPage() {
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-300">
                   Registration Number <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 99240040799"
-                  value={members[activeTab - 1].regNo}
-                  onChange={(e) => updateMember(activeTab - 1, "regNo", e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl glass-input text-sm text-white font-mono uppercase"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="e.g. 99240040799"
+                    value={members[activeTab - 1].regNo}
+                    onChange={(e) => updateMember(activeTab - 1, "regNo", e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl glass-input text-sm text-white font-mono uppercase transition-all ${
+                      memberRegErrors[activeTab - 1] ? "border-red-500/80 bg-red-950/20" : ""
+                    }`}
+                  />
+                  {memberRegErrors[activeTab - 1] && (
+                    <AlertTriangle className="w-5 h-5 text-red-400 absolute right-4 top-3.5 animate-in zoom-in-50" />
+                  )}
+                </div>
+                {memberRegErrors[activeTab - 1] && (
+                  <div className="p-2.5 rounded-lg bg-red-950/90 border border-red-500/80 text-red-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>{memberRegErrors[activeTab - 1]}</span>
+                  </div>
+                )}
               </div>
 
               {/* Auto Generated Email (Read-Only) */}
@@ -801,8 +890,13 @@ export default function RegisterPage() {
               {activeTab < 4 ? (
                 <button
                   type="button"
-                  onClick={() => setActiveTab(activeTab + 1)}
-                  className="px-6 py-3 rounded-xl glass-btn-primary font-bold text-xs uppercase flex items-center gap-2"
+                  disabled={Boolean(memberRegErrors[activeTab - 1])}
+                  onClick={handleNextMember}
+                  className={`px-6 py-3 rounded-xl font-bold text-xs uppercase flex items-center gap-2 transition-all ${
+                    Boolean(memberRegErrors[activeTab - 1])
+                      ? "bg-red-950/40 text-red-400 border border-red-500/30 cursor-not-allowed shadow-none"
+                      : "glass-btn-primary"
+                  }`}
                 >
                   <span>Next Member</span>
                   <ArrowRight className="w-4 h-4" />

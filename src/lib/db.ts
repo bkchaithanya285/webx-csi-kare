@@ -359,11 +359,40 @@ export async function isTeamNameTaken(teamName: string): Promise<boolean> {
   }
 }
 
+// Real-time Check for Globally Unique Student Registration Number
+export async function isStudentRegNoTaken(regNo: string): Promise<boolean> {
+  const clean = regNo.trim().toUpperCase();
+  if (!clean || clean.length < 5) return false;
+
+  try {
+    const teamsSnap = await withTimeout(getDocs(collection(db, "teams")), 6000, null);
+    if (teamsSnap && !teamsSnap.empty) {
+      for (const d of teamsSnap.docs) {
+        const data = d.data() as TeamData;
+        if (data.members) {
+          for (const m of data.members) {
+            if (m.regNo && m.regNo.trim().toUpperCase() === clean) {
+              return true;
+            }
+          }
+        }
+        if (data.leadRegNo && data.leadRegNo.trim().toUpperCase() === clean) {
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch (error: any) {
+    console.warn("isStudentRegNoTaken error:", error);
+    return false;
+  }
+}
+
 // Check Duplicate Registration Numbers & Unique Team Name
 export async function checkTeamUniqueness(teamName: string, regNumbers: string[]): Promise<{ valid: boolean; error?: string }> {
   try {
     const cleanTeam = teamName.trim().toLowerCase();
-    const teamsSnap = await withTimeout(getDocs(collection(db, "teams")), 2000, null);
+    const teamsSnap = await withTimeout(getDocs(collection(db, "teams")), 8000, null);
     if (teamsSnap) {
       const existingRegNos = new Set<string>();
       for (const docSnap of teamsSnap.docs) {
@@ -375,6 +404,9 @@ export async function checkTeamUniqueness(teamName: string, regNumbers: string[]
           data.members.forEach((m) => {
             if (m.regNo) existingRegNos.add(m.regNo.trim().toUpperCase());
           });
+        }
+        if (data.leadRegNo) {
+          existingRegNos.add(data.leadRegNo.trim().toUpperCase());
         }
       }
 
@@ -399,18 +431,59 @@ export async function submitTeamRegistration(
   try {
     const existingIds: string[] = [];
 
-    // Query all registered team IDs directly from Firestore
+    // Query all registered teams directly from Firestore to check uniqueness & assign sequential ID
     try {
       const snap = await getDocs(collection(db, "teams"));
       if (snap && !snap.empty) {
+        const cleanTeam = (data.teamName || "").trim().toLowerCase();
+        const existingRegNos = new Set<string>();
+
         snap.forEach((d) => {
           const tData = d.data() as TeamData;
           if (tData && tData.teamId) {
             existingIds.push(tData.teamId);
           }
+          // Verify Team Name Uniqueness on final submission
+          if (tData && tData.id !== data.id && tData.teamName && tData.teamName.trim().toLowerCase() === cleanTeam) {
+            throw new Error("Change the team name, it is already taken.");
+          }
+          // Aggregate existing registration numbers
+          if (tData && tData.id !== data.id) {
+            if (tData.members) {
+              tData.members.forEach((m) => {
+                if (m.regNo) existingRegNos.add(m.regNo.trim().toUpperCase());
+              });
+            }
+            if (tData.leadRegNo) {
+              existingRegNos.add(tData.leadRegNo.trim().toUpperCase());
+            }
+          }
         });
+
+        // Verify intra-team uniqueness
+        const intraTeamRegs = new Set<string>();
+        for (const m of data.members || []) {
+          const reg = (m.regNo || "").trim().toUpperCase();
+          if (reg) {
+            if (intraTeamRegs.has(reg)) {
+              return { success: false, teamId: "", message: `Duplicate registration number "${reg}" within your team!` };
+            }
+            intraTeamRegs.add(reg);
+            // Verify global uniqueness across teams
+            if (existingRegNos.has(reg)) {
+              return {
+                success: false,
+                teamId: "",
+                message: `Registration number "${reg}" is already registered in another team.`,
+              };
+            }
+          }
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message?.includes("Change the team name")) {
+        return { success: false, teamId: "", message: err.message };
+      }
       console.warn("Could not query teams snapshot, checking cached IDs:", err);
     }
 
