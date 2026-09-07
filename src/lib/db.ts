@@ -821,3 +821,22 @@ export async function getTeamByCodeOrEmail(identifier: string): Promise<TeamData
   }
 }
 
+// Update Team & Teammates Details (Admin Operation)
+export async function updateTeamDetails(
+  teamDocId: string,
+  updates: Partial<TeamData>
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const teamRef = doc(db, "teams", teamDocId);
+    await updateDoc(teamRef, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+    // Invalidate memory cache so dashboard and public pages get the updated record immediately
+    teamMemoryCache.clear();
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error updating team details:", error);
+    return { success: false, message: error?.message || "Failed to update team details." };
+  }
+}

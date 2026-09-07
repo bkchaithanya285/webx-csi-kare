@@ -31,18 +31,24 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Edit3,
+  RotateCcw,
+  Check,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import jsPDF from "jspdf";
 import JSZip from "jszip";
 import { PrintableEventPass } from "@/components/PrintableEventPass";
+import { AdminAnalyticsCharts } from "@/components/AdminAnalyticsCharts";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import {
   getCapacityStatus,
   getSystemSettings,
   updateSystemSettings,
   deleteTeamRegistration,
+  updateTeamDetails,
   TeamData,
+  Student,
   SystemSettings,
 } from "@/lib/db";
 import { getTeamLeadInfo, normalizeTeamLead } from "@/lib/teamUtils";
@@ -87,9 +93,22 @@ export default function AdminDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [deptFilter, setDeptFilter] = useState("ALL");
+  const [yearFilter, setYearFilter] = useState("ALL");
+  const [genderFilter, setGenderFilter] = useState("ALL");
+  const [accommFilter, setAccommFilter] = useState("ALL");
   const [teamIdSortOrder, setTeamIdSortOrder] = useState<"asc" | "desc">("asc");
 
   const [selectedTeam, setSelectedTeam] = useState<TeamData | null>(null);
+
+  // Edit Team & Teammates modal state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editTeamName, setEditTeamName] = useState("");
+  const [editUtr, setEditUtr] = useState("");
+  const [editMembers, setEditMembers] = useState<Student[]>([]);
+  const [editLeadIndex, setEditLeadIndex] = useState(0);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -244,6 +263,139 @@ export default function AdminDashboardPage() {
       alert("Failed to delete team. Please try again.");
     } finally {
       setDeletingTeamId(null);
+    }
+  };
+
+  // Open Inspect / Edit Modal
+  const handleOpenTeamModal = (team: TeamData, startInEditMode = false) => {
+    setSelectedTeam(team);
+    setIsEditMode(startInEditMode);
+    setEditTeamName(team.teamName || "");
+    setEditUtr(team.utrNumber || "");
+    const leadInfo = getTeamLeadInfo(team);
+    setEditLeadIndex(leadInfo.leaderIndex >= 0 ? leadInfo.leaderIndex : 0);
+    setEditMembers(
+      (team.members || []).map((m) => ({
+        name: m.name || "",
+        regNo: m.regNo || "",
+        department: m.department || "",
+        year: m.year || "",
+        section: m.section || "",
+        mobile: m.mobile || "",
+        email: m.email || "",
+        gender: m.gender || "Male",
+        accommodation: m.accommodation || "Hosteller",
+        hostel: m.hostel || "",
+        roomNo: m.roomNo || "",
+      }))
+    );
+    setEditError("");
+    setEditSuccess("");
+  };
+
+  // Save Team & Members Edit in Firestore
+  const handleSaveTeamEdit = async () => {
+    if (!selectedTeam) return;
+    const docId = selectedTeam.id || selectedTeam.teamId;
+    if (!docId) {
+      setEditError("Missing team document identifier.");
+      return;
+    }
+
+    if (!editTeamName.trim()) {
+      setEditError("Team Name cannot be empty.");
+      return;
+    }
+
+    if (!editMembers || editMembers.length === 0) {
+      setEditError("Team must have at least 1 member.");
+      return;
+    }
+
+    for (let i = 0; i < editMembers.length; i++) {
+      const m = editMembers[i];
+      if (!m.name.trim()) {
+        setEditError(`Member ${i + 1} Name is required.`);
+        return;
+      }
+      if (!m.regNo.trim()) {
+        setEditError(`Member ${i + 1} Registration Number is required.`);
+        return;
+      }
+      if (!m.email.trim()) {
+        setEditError(`Member ${i + 1} Email is required.`);
+        return;
+      }
+    }
+
+    setSavingEdit(true);
+    setEditError("");
+    setEditSuccess("");
+
+    try {
+      const targetLeadIndex =
+        editLeadIndex >= 0 && editLeadIndex < editMembers.length ? editLeadIndex : 0;
+      const leadMember = editMembers[targetLeadIndex] || editMembers[0];
+
+      const cleanLeadName = leadMember.name.trim().toUpperCase();
+      const cleanLeadEmail = leadMember.email.trim().toLowerCase();
+      const cleanLeadRegNo = leadMember.regNo.trim().toUpperCase();
+
+      const sanitizedMembers = editMembers.map((m) => ({
+        ...m,
+        name: m.name.trim().toUpperCase(),
+        regNo: m.regNo.trim().toUpperCase(),
+        department: m.department.trim().toUpperCase(),
+        year: m.year.trim().toUpperCase(),
+        section: m.section.trim().toUpperCase(),
+        mobile: m.mobile.trim(),
+        email: m.email.trim().toLowerCase(),
+        gender: m.gender,
+        accommodation: m.accommodation,
+        hostel: m.hostel?.trim() || "",
+        roomNo: m.roomNo?.trim() || "",
+      }));
+
+      const updates: Partial<TeamData> = {
+        teamName: editTeamName.trim(),
+        utrNumber: editUtr.trim(),
+        leadName: cleanLeadName,
+        leadEmail: cleanLeadEmail,
+        leadRegNo: cleanLeadRegNo,
+        leaderIndex: targetLeadIndex,
+        members: sanitizedMembers,
+      };
+
+      // Call updateTeamDetails
+      const res = await updateTeamDetails(selectedTeam.id || docId, updates);
+      if (!res.success) {
+        setEditError(res.message || "Failed to update team details in database.");
+        return;
+      }
+
+      // Update local state immediately
+      const updatedFullTeam: TeamData = {
+        ...selectedTeam,
+        ...updates,
+      };
+
+      setSelectedTeam(updatedFullTeam);
+      setTeams((prev) =>
+        prev.map((t) =>
+          t.id === selectedTeam.id || t.teamId === selectedTeam.teamId ? updatedFullTeam : t
+        )
+      );
+
+      setEditSuccess("Team details and Team Lead updated successfully! Live pass updated.");
+      setTimeout(() => {
+        setIsEditMode(false);
+        setEditSuccess("");
+      }, 1500);
+    } catch (err: any) {
+      console.error("Save team edit error:", err);
+      setEditError(err?.message || "Unexpected error while saving updates.");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -772,10 +924,19 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Extract dynamic unique departments across registered members
+  const uniqueDepartments = Array.from(
+    new Set(
+      teams.flatMap((t) =>
+        (t.members || []).map((m) => (m.department || "").trim().toUpperCase()).filter(Boolean)
+      )
+    )
+  ).sort();
+
   // Multi-Filter & Search with Team ID Sorting
   const filteredTeams = teams
     .filter((t) => {
-      const term = searchTerm.toLowerCase();
+      const term = searchTerm.toLowerCase().trim();
       const matchesSearch =
         !term ||
         t.teamId?.toLowerCase().includes(term) ||
@@ -783,12 +944,52 @@ export default function AdminDashboardPage() {
         t.leadEmail.toLowerCase().includes(term) ||
         t.leadName?.toLowerCase().includes(term) ||
         t.utrNumber.includes(term) ||
-        t.members.some((m) => m.name.toLowerCase().includes(term) || m.regNo.toLowerCase().includes(term));
+        t.members.some(
+          (m) =>
+            m.name?.toLowerCase().includes(term) ||
+            m.regNo?.toLowerCase().includes(term) ||
+            m.email?.toLowerCase().includes(term) ||
+            m.mobile?.toLowerCase().includes(term)
+        );
 
       const matchesStatus = statusFilter === "ALL" || t.paymentStatus === statusFilter;
-      const matchesDept = deptFilter === "ALL" || t.members.some((m) => m.department === deptFilter);
 
-      return matchesSearch && matchesStatus && matchesDept;
+      const matchesDept =
+        deptFilter === "ALL" ||
+        t.members.some((m) => (m.department || "").trim().toUpperCase() === deptFilter.toUpperCase());
+
+      const matchesYear =
+        yearFilter === "ALL" ||
+        t.members.some((m) => {
+          const y = (m.year || "").trim().toUpperCase();
+          if (yearFilter === "Year I") return y === "1" || y === "I" || y === "YEAR I";
+          if (yearFilter === "Year II") return y === "2" || y === "II" || y === "YEAR II";
+          if (yearFilter === "Year III") return y === "3" || y === "III" || y === "YEAR III";
+          if (yearFilter === "Year IV") return y === "4" || y === "IV" || y === "YEAR IV";
+          return y === yearFilter.toUpperCase();
+        });
+
+      const matchesGender =
+        genderFilter === "ALL" ||
+        t.members.some((m) => (m.gender || "").trim().toLowerCase() === genderFilter.toLowerCase());
+
+      const matchesAccomm =
+        accommFilter === "ALL" ||
+        t.members.some((m) => {
+          const a = (m.accommodation || "").toLowerCase();
+          if (accommFilter === "Hosteller") return a.includes("hostel");
+          if (accommFilter === "Day Scholar") return a.includes("day");
+          return true;
+        });
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesDept &&
+        matchesYear &&
+        matchesGender &&
+        matchesAccomm
+      );
     })
     .sort((a, b) => {
       const cmp = (a.teamId || "").localeCompare(b.teamId || "", undefined, {
@@ -914,62 +1115,144 @@ export default function AdminDashboardPage() {
       {activeTab === "teams" && (
         <div className="flex flex-col gap-6">
           
-          {/* Controls Bar: Search, Filters & CSV Export */}
-          <div className="glass-card p-4 rounded-2xl border border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="relative w-full md:w-80">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                placeholder="Search Team ID, Name, Reg No, UTR..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-xl glass-input text-xs text-white"
-              />
-            </div>
+          {/* DEMOGRAPHICS PIE CHARTS (YEAR, GENDER, DEPARTMENT, ACCOMMODATION) */}
+          <AdminAnalyticsCharts teams={teams} />
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="PENDING">Pending Only</option>
-                <option value="VERIFIED">Verified Only</option>
-                <option value="REJECTED">Rejected Only</option>
-              </select>
-
-              <select
-                value={deptFilter}
-                onChange={(e) => setDeptFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900"
-              >
-                <option value="ALL">All Departments</option>
-                {["CSE", "ECE", "IT", "EEE", "MECH", "CIVIL", "BIO"].map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-
-              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10">
-                <ArrowUpDown className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                <select
-                  value={teamIdSortOrder}
-                  onChange={(e) => setTeamIdSortOrder(e.target.value as "asc" | "desc")}
-                  className="bg-transparent text-white text-xs outline-none cursor-pointer"
-                  title="Sort teams by Team ID"
-                >
-                  <option value="asc" className="bg-slate-900 text-white">Team ID (Asc 001 → 100)</option>
-                  <option value="desc" className="bg-slate-900 text-white">Team ID (Desc 100 → 001)</option>
-                </select>
+          {/* Controls Bar: Multi-Dimensional Filters, Search & Exports */}
+          <div className="glass-card p-5 rounded-2xl border border-white/10 flex flex-col gap-4">
+            
+            {/* Top Row: Search Input + Active Filter Indicators & Reset */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search Team ID, Team Name, Member, Reg No, Mobile, UTR..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs text-white"
+                />
               </div>
 
-              <button
-                onClick={exportToExcel}
-                className="px-4 py-2 rounded-xl glass-btn-primary text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-md shadow-emerald-950/60 bg-emerald-700 hover:bg-emerald-600 text-white"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>Export Excel (.xlsx)</span>
-              </button>
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                <span className="text-xs font-mono font-bold text-gray-300">
+                  Showing <strong className="text-red-400 font-extrabold">{filteredTeams.length}</strong> of{" "}
+                  <span className="text-white font-extrabold">{teams.length}</span> Teams
+                </span>
+
+                {(searchTerm ||
+                  statusFilter !== "ALL" ||
+                  deptFilter !== "ALL" ||
+                  yearFilter !== "ALL" ||
+                  genderFilter !== "ALL" ||
+                  accommFilter !== "ALL") && (
+                  <button
+                    onClick={() => {
+                      setSearchTerm("");
+                      setStatusFilter("ALL");
+                      setDeptFilter("ALL");
+                      setYearFilter("ALL");
+                      setGenderFilter("ALL");
+                      setAccommFilter("ALL");
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-300 text-[11px] font-bold uppercase flex items-center gap-1 transition-colors"
+                    title="Reset all filters to default"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Row: Filter Dropdowns & Export Action Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
+              
+              {/* Filter Selects */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Status Filter */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">Pending Only</option>
+                  <option value="VERIFIED">Verified Only</option>
+                  <option value="REJECTED">Rejected Only</option>
+                </select>
+
+                {/* Year Filter */}
+                <select
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10"
+                >
+                  <option value="ALL">All Years</option>
+                  <option value="Year I">Year I</option>
+                  <option value="Year II">Year II</option>
+                  <option value="Year III">Year III</option>
+                  <option value="Year IV">Year IV</option>
+                </select>
+
+                {/* Gender Filter */}
+                <select
+                  value={genderFilter}
+                  onChange={(e) => setGenderFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10"
+                >
+                  <option value="ALL">All Genders</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+
+                {/* Department Filter */}
+                <select
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10"
+                >
+                  <option value="ALL">All Departments</option>
+                  {uniqueDepartments.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+
+                {/* Accommodation Filter */}
+                <select
+                  value={accommFilter}
+                  onChange={(e) => setAccommFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10"
+                >
+                  <option value="ALL">All Accommodation</option>
+                  <option value="Hosteller">Hosteller</option>
+                  <option value="Day Scholar">Day Scholar</option>
+                </select>
+
+                {/* Sort Order */}
+                <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass-input text-xs text-white bg-slate-900 border border-white/10">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <select
+                    value={teamIdSortOrder}
+                    onChange={(e) => setTeamIdSortOrder(e.target.value as "asc" | "desc")}
+                    className="bg-transparent text-white text-xs outline-none cursor-pointer"
+                    title="Sort teams by Team ID"
+                  >
+                    <option value="asc" className="bg-slate-900 text-white">Team ID (Asc)</option>
+                    <option value="desc" className="bg-slate-900 text-white">Team ID (Desc)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Exports */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={exportToExcel}
+                  className="px-3.5 py-2 rounded-xl glass-btn-primary text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-emerald-950/60 bg-emerald-700 hover:bg-emerald-600 text-white"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Excel</span>
+                </button>
 
               <button
                 onClick={exportToCSV}
@@ -1010,6 +1293,7 @@ export default function AdminDashboardPage() {
               </button>
             </div>
           </div>
+        </div>
 
           {/* Teams Table */}
           <div className="glass-card rounded-3xl border border-white/10 overflow-hidden">
@@ -1083,11 +1367,20 @@ export default function AdminDashboardPage() {
                             <span>{exportingSingleTeamId === t.teamId ? "..." : "Pass"}</span>
                           </button>
                           <button
-                            onClick={() => setSelectedTeam(t)}
-                            className="px-3 py-1.5 rounded-lg glass-btn-secondary text-[11px] font-bold uppercase flex items-center gap-1.5"
+                            onClick={() => handleOpenTeamModal(t, false)}
+                            className="px-2.5 py-1.5 rounded-lg glass-btn-secondary text-[11px] font-bold uppercase flex items-center gap-1.5 hover:text-white"
+                            title="Inspect Team and Payment Proof"
                           >
                             <Eye className="w-3.5 h-3.5 text-blue-400" />
                             <span>Inspect</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenTeamModal(t, true)}
+                            title="Edit team & member details, or change team lead"
+                            className="px-2.5 py-1.5 rounded-lg glass-btn-secondary text-amber-400 hover:text-amber-300 border border-amber-500/30 hover:border-amber-500/60 text-[11px] font-bold uppercase flex items-center gap-1.5 transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Edit</span>
                           </button>
                           <button
                             onClick={() => handleDeleteTeam(t)}
@@ -1279,16 +1572,19 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* INSPECT TEAM & PAYMENT SCREENSHOT MODAL */}
+      {/* INSPECT & EDIT TEAM MODAL */}
       {selectedTeam && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl glass-card rounded-3xl p-6 sm:p-8 border border-red-500/40 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-3xl glass-card rounded-3xl p-5 sm:p-7 border border-red-500/40 shadow-2xl flex flex-col gap-6 max-h-[92vh] overflow-y-auto">
             
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            {/* Modal Top Header */}
+            <div className="flex items-start sm:items-center justify-between border-b border-white/10 pb-4 gap-3">
               <div>
                 <span className="text-xs font-mono text-red-400 font-bold">{selectedTeam.teamId}</span>
-                <h3 className="text-xl font-extrabold text-white">{selectedTeam.teamName}</h3>
-                {(() => {
+                <h3 className="text-xl sm:text-2xl font-extrabold text-white">
+                  {isEditMode ? `EDITING: ${selectedTeam.teamName}` : selectedTeam.teamName}
+                </h3>
+                {!isEditMode && (() => {
                   const selLead = getTeamLeadInfo(selectedTeam);
                   return (
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -1303,124 +1599,474 @@ export default function AdminDashboardPage() {
                     </div>
                   );
                 })()}
+                {isEditMode && (
+                  <p className="text-xs text-amber-300 mt-1">
+                    Edit teammate details, reassign the team lead, and save to update live passes and logins.
+                  </p>
+                )}
               </div>
-              <button
-                onClick={() => setSelectedTeam(null)}
-                className="p-2 rounded-xl bg-white/5 text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsEditMode(!isEditMode)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
+                    isEditMode
+                      ? "bg-amber-600 text-white shadow-md shadow-amber-950"
+                      : "glass-btn-secondary text-amber-300 hover:text-white border border-amber-500/40"
+                  }`}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>{isEditMode ? "View Mode" : "Edit Team"}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedTeam(null);
+                    setIsEditMode(false);
+                  }}
+                  className="p-2 rounded-xl bg-white/5 text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Payment Screenshot & UTR */}
-              <div className="flex flex-col gap-3">
-                <span className="text-xs font-bold uppercase text-gray-300">UTR / TRANS REF NO:</span>
-                <div className="p-3 rounded-xl bg-black/50 border border-white/10 text-lg font-mono text-red-400 font-extrabold">
-                  {selectedTeam.utrNumber}
+            {/* MODAL BODY */}
+            {!isEditMode ? (
+              <>
+                {/* 1. VIEW / INSPECT MODE */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Payment Screenshot & UTR */}
+                  <div className="flex flex-col gap-3">
+                    <span className="text-xs font-bold uppercase text-gray-300">UTR / TRANS REF NO:</span>
+                    <div className="p-3 rounded-xl bg-black/50 border border-white/10 text-lg font-mono text-red-400 font-extrabold">
+                      {selectedTeam.utrNumber}
+                    </div>
+
+                    <span className="text-xs font-bold uppercase text-gray-300 mt-2">CLOUDINARY SCREENSHOT PROOF:</span>
+                    <div className="relative w-full h-64 rounded-2xl overflow-hidden border border-white/15 bg-slate-900">
+                      {selectedTeam.paymentScreenshotUrl ? (
+                        <Image
+                          src={selectedTeam.paymentScreenshotUrl}
+                          alt="Payment Screenshot"
+                          fill
+                          unoptimized
+                          className="object-contain"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
+                          No screenshot image uploaded
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Members List */}
+                  <div className="flex flex-col gap-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase text-gray-300">4 TEAM MEMBERS:</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditMode(true)}
+                        className="text-[11px] text-amber-400 hover:text-amber-300 font-bold uppercase flex items-center gap-1"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {(() => {
+                        const selLead = getTeamLeadInfo(selectedTeam);
+                        return selectedTeam.members.map((m, idx) => {
+                          const isLead = idx === selLead.leaderIndex;
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-3 rounded-xl border transition-all ${
+                                isLead
+                                  ? "bg-rose-950/60 border-rose-500 ring-2 ring-rose-500/50 shadow-lg shadow-rose-950/50"
+                                  : "bg-white/5 border-white/10"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <strong className="text-white text-sm font-bold">{idx + 1}. {m.name} ({m.regNo})</strong>
+                                  {isLead && (
+                                    <span className="px-2 py-0.5 rounded bg-rose-600 text-[10px] font-black text-white uppercase tracking-wider shadow flex items-center gap-1">
+                                      ★ TEAM LEAD
+                                    </span>
+                                  )}
+                                </div>
+                                {isLead && (
+                                  <span className="text-[11px] font-black text-rose-400 uppercase tracking-wide">
+                                    [LEAD]
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-gray-300">{m.department} • Year {m.year} • Sec {m.section} • {m.mobile}</span>
+                              <br />
+                              <span className="text-gray-400">Accomm: {m.accommodation} {m.hostel && `(${m.hostel} / ${m.roomNo})`}</span>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
                 </div>
 
-                <span className="text-xs font-bold uppercase text-gray-300 mt-2">CLOUDINARY SCREENSHOT PROOF:</span>
-                <div className="relative w-full h-64 rounded-2xl overflow-hidden border border-white/15 bg-slate-900">
-                  {selectedTeam.paymentScreenshotUrl ? (
-                    <Image
-                      src={selectedTeam.paymentScreenshotUrl}
-                      alt="Payment Screenshot"
-                      fill
-                      unoptimized
-                      className="object-contain"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
-                      No screenshot image uploaded
+                {/* Action Buttons: DELETE / REJECT / VERIFY */}
+                <div className="flex items-center justify-between pt-4 border-t border-white/10 flex-wrap gap-3">
+                  <button
+                    onClick={() => handleDeleteTeam(selectedTeam)}
+                    disabled={deletingTeamId === selectedTeam.teamId || deletingTeamId === selectedTeam.id}
+                    className="px-4 py-2.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/60 text-red-300 font-bold text-xs uppercase flex items-center gap-2 transition-colors disabled:opacity-50"
+                    title="Delete this team registration"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    <span>{deletingTeamId === selectedTeam.teamId || deletingTeamId === selectedTeam.id ? "DELETING..." : "DELETE TEAM"}</span>
+                  </button>
+
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditMode(true)}
+                      className="px-3.5 py-2.5 rounded-xl glass-btn-secondary text-amber-300 hover:text-white border border-amber-500/40 font-bold text-xs uppercase flex items-center gap-1.5 transition-colors"
+                      title="Edit teammates and change team lead"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      <span>Edit Teammates</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDownloadSinglePassPDF(selectedTeam)}
+                      disabled={exportingSingleTeamId === selectedTeam.teamId}
+                      className="px-4 py-2.5 rounded-xl glass-btn-secondary text-emerald-400 hover:text-emerald-300 font-bold text-xs uppercase flex items-center gap-2 border border-emerald-500/40 transition-colors disabled:opacity-50"
+                      title="Download this team's official Event Pass as PDF"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>{exportingSingleTeamId === selectedTeam.teamId ? "Generating..." : "Pass (PDF)"}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowRejectModal(true)}
+                      className="px-4 py-2.5 rounded-xl bg-red-950 border border-red-500 text-red-300 font-bold text-xs uppercase flex items-center gap-2"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>REJECT</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleVerifyStatus(selectedTeam.teamId!, "VERIFIED")}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase flex items-center gap-2 shadow-lg shadow-emerald-950"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>VERIFY</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* 2. EDIT TEAM & MEMBERS MODE */}
+                <div className="flex flex-col gap-6">
+                  {editError && (
+                    <div className="p-3 rounded-xl bg-red-950/90 border border-red-500 text-red-200 text-xs font-semibold flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                      <span>{editError}</span>
                     </div>
                   )}
-                </div>
-              </div>
+                  {editSuccess && (
+                    <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{editSuccess}</span>
+                    </div>
+                  )}
 
-              {/* Members List */}
-              <div className="flex flex-col gap-3 text-xs">
-                <span className="text-xs font-bold uppercase text-gray-300">4 TEAM MEMBERS:</span>
-                <div className="flex flex-col gap-2">
-                  {(() => {
-                    const selLead = getTeamLeadInfo(selectedTeam);
-                    return selectedTeam.members.map((m, idx) => {
-                      const isLead = idx === selLead.leaderIndex;
-                      return (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-xl border transition-all ${
-                            isLead
-                              ? "bg-rose-950/60 border-rose-500 ring-2 ring-rose-500/50 shadow-lg shadow-rose-950/50"
-                              : "bg-white/5 border-white/10"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <strong className="text-white text-sm font-bold">{idx + 1}. {m.name} ({m.regNo})</strong>
-                              {isLead && (
-                                <span className="px-2 py-0.5 rounded bg-rose-600 text-[10px] font-black text-white uppercase tracking-wider shadow flex items-center gap-1">
-                                  ★ TEAM LEAD
+                  {/* Team Top Details */}
+                  <div className="grid sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-white/5 border border-white/10">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-gray-300 uppercase">Team Name *</label>
+                      <input
+                        type="text"
+                        value={editTeamName}
+                        onChange={(e) => setEditTeamName(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
+                        placeholder="Team Name"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-gray-300 uppercase">UTR / Reference No</label>
+                      <input
+                        type="text"
+                        value={editUtr}
+                        onChange={(e) => setEditUtr(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white font-mono"
+                        placeholder="12-digit UTR"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 4 Teammates Forms with Change Lead */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-gray-200 flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-red-400" />
+                        <span>EDIT 4 MEMBERS & DESIGNATE TEAM LEAD</span>
+                      </span>
+                      <span className="text-[11px] text-amber-300">
+                        Click &quot;Set as Team Lead&quot; to change the team leader
+                      </span>
+                    </div>
+
+                    <div className="grid gap-4">
+                      {editMembers.map((m, idx) => {
+                        const isLead = editLeadIndex === idx;
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-4 rounded-2xl border transition-all ${
+                              isLead
+                                ? "bg-rose-950/40 border-rose-500 ring-2 ring-rose-500/40 shadow-lg shadow-rose-950/40"
+                                : "bg-white/5 border-white/10"
+                            }`}
+                          >
+                            {/* Member Card Header & Leader Switcher */}
+                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center ${
+                                    isLead ? "bg-rose-600 text-white" : "bg-white/10 text-gray-300"
+                                  }`}
+                                >
+                                  {idx + 1}
                                 </span>
+                                <strong className="text-white text-sm">Member {idx + 1} Details</strong>
+                              </div>
+
+                              <div>
+                                {isLead ? (
+                                  <span className="px-3 py-1 rounded-lg bg-rose-600 text-white font-black text-xs uppercase tracking-wider shadow flex items-center gap-1.5">
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>OFFICIAL TEAM LEAD</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditLeadIndex(idx)}
+                                    className="px-3 py-1 rounded-lg bg-white/10 hover:bg-rose-600 text-gray-300 hover:text-white font-bold text-xs uppercase tracking-wider transition-colors flex items-center gap-1"
+                                  >
+                                    <span>★ Set as Team Lead</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Member Input Fields */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Full Name *</span>
+                                <input
+                                  type="text"
+                                  value={m.name}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], name: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                  placeholder="Student Full Name"
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Reg No *</span>
+                                <input
+                                  type="text"
+                                  value={m.regNo}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], regNo: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white font-mono"
+                                  placeholder="e.g. 99240040..."
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Mobile Number</span>
+                                <input
+                                  type="text"
+                                  value={m.mobile}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], mobile: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white font-mono"
+                                  placeholder="10-digit mobile"
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">University Email *</span>
+                                <input
+                                  type="email"
+                                  value={m.email}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], email: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white font-mono"
+                                  placeholder="name@klu.ac.in"
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Department</span>
+                                <input
+                                  type="text"
+                                  value={m.department}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], department: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                  placeholder="e.g. CSE, ECE"
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Year</span>
+                                <select
+                                  value={m.year}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], year: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white bg-slate-900 border border-white/10"
+                                >
+                                  <option value="I">Year I</option>
+                                  <option value="II">Year II</option>
+                                  <option value="III">Year III</option>
+                                  <option value="IV">Year IV</option>
+                                </select>
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Section</span>
+                                <input
+                                  type="text"
+                                  value={m.section}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], section: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                  placeholder="e.g. 23SD"
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Gender</span>
+                                <select
+                                  value={m.gender}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], gender: e.target.value };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white bg-slate-900 border border-white/10"
+                                >
+                                  <option value="Male">Male</option>
+                                  <option value="Female">Female</option>
+                                  <option value="Other">Other</option>
+                                </select>
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase">Accommodation</span>
+                                <select
+                                  value={m.accommodation}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = { ...updated[idx], accommodation: e.target.value as any };
+                                    setEditMembers(updated);
+                                  }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-white bg-slate-900 border border-white/10"
+                                >
+                                  <option value="Hosteller">Hosteller</option>
+                                  <option value="Day Scholar">Day Scholar</option>
+                                </select>
+                              </div>
+
+                              {m.accommodation === "Hosteller" && (
+                                <>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">Hostel Name</span>
+                                    <input
+                                      type="text"
+                                      value={m.hostel || ""}
+                                      onChange={(e) => {
+                                        const updated = [...editMembers];
+                                        updated[idx] = { ...updated[idx], hostel: e.target.value };
+                                        setEditMembers(updated);
+                                      }}
+                                      className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                      placeholder="e.g. MH-3"
+                                    />
+                                  </div>
+
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">Room No</span>
+                                    <input
+                                      type="text"
+                                      value={m.roomNo || ""}
+                                      onChange={(e) => {
+                                        const updated = [...editMembers];
+                                        updated[idx] = { ...updated[idx], roomNo: e.target.value };
+                                        setEditMembers(updated);
+                                      }}
+                                      className="px-3 py-2 rounded-lg glass-input text-xs text-white"
+                                      placeholder="e.g. 435"
+                                    />
+                                  </div>
+                                </>
                               )}
                             </div>
-                            {isLead && (
-                              <span className="text-[11px] font-black text-rose-400 uppercase tracking-wide">
-                                [LEAD]
-                              </span>
-                            )}
                           </div>
-                          <span className="text-gray-300">{m.department} • Year {m.year} • Sec {m.section} • {m.mobile}</span>
-                          <br />
-                          <span className="text-gray-400">Accomm: {m.accommodation} {m.hostel && `(${m.hostel} / ${m.roomNo})`}</span>
-                        </div>
-                      );
-                    });
-                  })()}
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Edit Mode Bottom Actions */}
+                  <div className="flex items-center justify-between pt-4 border-t border-white/10 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditMode(false)}
+                      className="px-5 py-2.5 rounded-xl glass-btn-secondary text-xs font-bold uppercase text-gray-300 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveTeamEdit}
+                      disabled={savingEdit}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs uppercase flex items-center gap-2 shadow-lg shadow-emerald-950 transition-all disabled:opacity-50"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{savingEdit ? "Saving Updates..." : "Save Changes & Update Live Pass"}</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Action Buttons: DELETE / REJECT / VERIFY */}
-            <div className="flex items-center justify-between pt-4 border-t border-white/10">
-              <button
-                onClick={() => handleDeleteTeam(selectedTeam)}
-                disabled={deletingTeamId === selectedTeam.teamId || deletingTeamId === selectedTeam.id}
-                className="px-4 py-2.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/60 text-red-300 font-bold text-xs uppercase flex items-center gap-2 transition-colors disabled:opacity-50"
-                title="Delete this team registration"
-              >
-                <Trash2 className="w-4 h-4 text-red-400" />
-                <span>{deletingTeamId === selectedTeam.teamId || deletingTeamId === selectedTeam.id ? "DELETING..." : "DELETE TEAM"}</span>
-              </button>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleDownloadSinglePassPDF(selectedTeam)}
-                  disabled={exportingSingleTeamId === selectedTeam.teamId}
-                  className="px-4 py-2.5 rounded-xl glass-btn-secondary text-emerald-400 hover:text-emerald-300 font-bold text-xs uppercase flex items-center gap-2 border border-emerald-500/40 transition-colors disabled:opacity-50"
-                  title="Download this team's official Event Pass as PDF"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>{exportingSingleTeamId === selectedTeam.teamId ? "Generating..." : "Download Pass (PDF)"}</span>
-                </button>
-
-                <button
-                  onClick={() => setShowRejectModal(true)}
-                  className="px-5 py-2.5 rounded-xl bg-red-950 border border-red-500 text-red-300 font-bold text-xs uppercase flex items-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span>REJECT PAYMENT</span>
-                </button>
-
-                <button
-                  onClick={() => handleVerifyStatus(selectedTeam.teamId!, "VERIFIED")}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase flex items-center gap-2 shadow-lg shadow-emerald-950"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>VERIFY PAYMENT</span>
-                </button>
-              </div>
-            </div>
+              </>
+            )}
 
           </div>
         </div>
