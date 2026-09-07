@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import confetti from "canvas-confetti";
-import { CheckCircle2, Download, MessageSquare, ShieldCheck, Calendar, MapPin, Users, Award, ExternalLink, FileImage, Clock } from "lucide-react";
+import { CheckCircle2, Download, MessageSquare, ShieldCheck, Calendar, MapPin, Users, Award, ExternalLink, FileImage, Clock, Copy, Check } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import jsPDF from "jspdf";
 import { Student, getTeamByCodeOrEmail } from "@/lib/db";
@@ -27,6 +27,13 @@ export default function SuccessPage() {
   } | null>(null);
 
   const [downloadingType, setDownloadingType] = useState<"pdf" | "image" | null>(null);
+  const [copiedWa, setCopiedWa] = useState(false);
+
+  const handleCopyWhatsAppLink = () => {
+    navigator.clipboard.writeText("https://chat.whatsapp.com/JOx52bGSXl5CageXABsRFa");
+    setCopiedWa(true);
+    setTimeout(() => setCopiedWa(false), 2500);
+  };
 
   useEffect(() => {
     // Trigger celebratory confetti on mount
@@ -160,20 +167,51 @@ export default function SuccessPage() {
           {confirmed.teamId}
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
-          <a
-            href="https://chat.whatsapp.com/JOx52bGSXl5CageXABsRFa"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-950/60 transition-all hover:scale-105"
-          >
-            <svg className="w-4 h-4 fill-current text-white shrink-0" viewBox="0 0 24 24">
-              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-            </svg>
-            <span>JOIN OFFICIAL WHATSAPP GROUP</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+        {/* MANDATORY ACTION: WHATSAPP GROUP FOR ALL 4 MEMBERS */}
+        <div className="w-full max-w-xl p-5 rounded-2xl bg-emerald-950/80 border-2 border-emerald-500/80 shadow-2xl flex flex-col gap-3 text-center sm:text-left animate-in fade-in my-2">
+          <div className="flex items-center gap-3 justify-center sm:justify-start">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 fill-current text-emerald-400" viewBox="0 0 24 24">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+              </svg>
+            </div>
+            <div>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] font-extrabold uppercase tracking-widest border border-emerald-400/50">
+                ACTION REQUIRED • MANDATORY
+              </span>
+              <h3 className="text-base sm:text-lg font-extrabold text-white">
+                Add All 4 Team Members to the Official WhatsApp Group
+              </h3>
+            </div>
+          </div>
 
+          <p className="text-xs text-emerald-100/90 leading-relaxed">
+            It is <strong>strictly mandatory</strong> for all 4 registered team members to join the official WhatsApp group. Hackathon round instructions, track themes, mentoring queues, and judging schedules will be broadcast exclusively in this group.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+            <a
+              href="https://chat.whatsapp.com/JOx52bGSXl5CageXABsRFa"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/60 transition-all hover:scale-105"
+            >
+              <span>Join WhatsApp Group</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+
+            <button
+              type="button"
+              onClick={handleCopyWhatsAppLink}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-200 border border-emerald-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+            >
+              {copiedWa ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedWa ? "Link Copied!" : "Copy Link for Teammates"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
           <button
             onClick={handleDownloadPassPDF}
             disabled={downloadingType !== null}
