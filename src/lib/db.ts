@@ -252,24 +252,65 @@ export async function getCapacityStatus(): Promise<{
     const settings = settingsRes.status === "fulfilled" ? settingsRes.value : DEFAULT_SETTINGS;
 
     let confirmedTeamsCount = 0;
+    const registeredEmails = new Set<string>();
+    const registeredTeamNames = new Set<string>();
+
     if (teamsRes.status === "fulfilled" && teamsRes.value && !teamsRes.value.empty) {
-      confirmedTeamsCount = teamsRes.value.size;
+      teamsRes.value.forEach((d) => {
+        const data = d.data() as TeamData;
+        if (data.leadEmail) registeredEmails.add(data.leadEmail.trim().toLowerCase());
+        if (data.accountEmail) registeredEmails.add(data.accountEmail.trim().toLowerCase());
+        if (data.teamName) registeredTeamNames.add(data.teamName.trim().toLowerCase());
+
+        // Only count valid, non-rejected teams toward capacity
+        if (data.paymentStatus !== "REJECTED") {
+          confirmedTeamsCount++;
+        }
+      });
     }
 
     let activeReservationsCount = 0;
+    const activeReservedIdentifiers = new Set<string>();
+    const expiredResDocIds: string[] = [];
+
     if (reservationsRes.status === "fulfilled" && reservationsRes.value) {
       reservationsRes.value.forEach((docSnap) => {
         const data = docSnap.data() as ReservationData;
-        if (data && data.expiresAt > now) {
+        const lead = (data.leadEmail || "").trim().toLowerCase();
+        const team = (data.teamName || "").trim().toLowerCase();
+
+        // Expired check
+        if (!data.expiresAt || data.expiresAt <= now) {
+          expiredResDocIds.push(docSnap.id);
+          return;
+        }
+
+        // If this team/lead is ALREADY registered in teams, DO NOT count their reservation!
+        if ((lead && registeredEmails.has(lead)) || (team && registeredTeamNames.has(team))) {
+          expiredResDocIds.push(docSnap.id);
+          return;
+        }
+
+        // Deduplicate reservations so 1 team/lead can NEVER occupy more than 1 reservation slot
+        const identifier = lead || team || docSnap.id;
+        if (!activeReservedIdentifiers.has(identifier)) {
+          activeReservedIdentifiers.add(identifier);
           activeReservationsCount++;
         }
       });
     }
 
+    // Auto-clean expired or orphaned reservation docs asynchronously
+    if (expiredResDocIds.length > 0) {
+      Promise.all(expiredResDocIds.map((id) => deleteDoc(doc(db, "reservations", id)).catch(() => {}))).catch(() => {});
+    }
+
     const maxTeams = typeof settings.maxTeams === "number" ? settings.maxTeams : 100;
-    const occupiedSlots = confirmedTeamsCount + activeReservationsCount;
-    const availableSlots = Math.max(0, maxTeams - occupiedSlots);
-    const isFull = occupiedSlots >= maxTeams;
+    const totalOccupied = confirmedTeamsCount + activeReservationsCount;
+    // Guaranteed to NEVER exceed maxTeams in display or progress bar (prevents 7/6)
+    const occupiedSlots = Math.min(maxTeams, totalOccupied);
+    const availableSlots = Math.max(0, maxTeams - totalOccupied);
+    const isFull = totalOccupied >= maxTeams;
     // Registration is open ONLY if explicitly open AND not full
     const registrationOpen = Boolean(settings.registrationOpen !== false && !isFull);
 
@@ -534,6 +575,31 @@ export async function submitTeamRegistration(
         localStorage.setItem("webx_team_" + newTeam.leadEmail.toLowerCase(), JSON.stringify(newTeam));
         sessionStorage.setItem("webx_confirmed_team", JSON.stringify(newTeam));
       } catch (e) {}
+    }
+
+    // Invalidate capacity cache so progress bar updates immediately
+    memoryCapacityCache = null;
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("webx_cached_capacity");
+      } catch (e) {}
+    }
+
+    // Immediately purge any reservation documents for this team or lead email
+    if (data.leadEmail || data.teamName) {
+      getDocs(collection(db, "reservations")).then((resSnap) => {
+        const cleanLead = (data.leadEmail || "").trim().toLowerCase();
+        const cleanTeam = (data.teamName || "").trim().toLowerCase();
+        resSnap.forEach((d) => {
+          const rData = d.data();
+          if (
+            (rData.leadEmail && rData.leadEmail.trim().toLowerCase() === cleanLead) ||
+            (rData.teamName && rData.teamName.trim().toLowerCase() === cleanTeam)
+          ) {
+            deleteDoc(doc(db, "reservations", d.id)).catch(() => {});
+          }
+        });
+      }).catch(() => {});
     }
 
     return { success: true, teamId: formattedId };

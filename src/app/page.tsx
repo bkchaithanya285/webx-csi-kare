@@ -122,7 +122,7 @@ export default function LandingPage() {
               TEAM REGISTRATION CAPACITY
             </span>
             <span suppressHydrationWarning className="text-red-400 font-extrabold text-lg tracking-wider glow-text-red">
-              {`${capacity.occupiedSlots} / ${capacity.maxTeams} TEAMS`}
+              {`${Math.min(capacity.maxTeams, capacity.occupiedSlots)} / ${capacity.maxTeams} TEAMS`}
             </span>
           </div>
 
@@ -130,7 +130,7 @@ export default function LandingPage() {
           <div className="w-full h-4 bg-slate-900/80 rounded-full overflow-hidden p-0.5 border border-white/10 relative">
             <div
               className="h-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500 rounded-full transition-all duration-1000 shadow-md shadow-red-600/50"
-              style={{ width: `${Math.min(100, (capacity.occupiedSlots / capacity.maxTeams) * 100)}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, (capacity.occupiedSlots / capacity.maxTeams) * 100))}%` }}
             />
           </div>
 
