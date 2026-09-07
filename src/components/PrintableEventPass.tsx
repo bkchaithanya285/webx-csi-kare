@@ -81,8 +81,11 @@ export const PrintableEventPass: React.FC<PrintableEventPassProps> = ({ team, do
               {team.teamName}
             </h2>
             <p className="text-xs text-gray-400 font-mono mt-0.5">
-              Team Lead: <span className="text-gray-200 font-semibold">{team.leadEmail}</span> • UTR:{" "}
-              <span className="text-gray-300">{team.utrNumber || "N/A"}</span>
+              Team Lead:{" "}
+              <span className="text-gray-200 font-semibold">
+                {team.leadName ? `${team.leadName} (${team.leadEmail})` : team.leadEmail}
+              </span>{" "}
+              • UTR: <span className="text-gray-300">{team.utrNumber || "N/A"}</span>
             </p>
           </div>
 

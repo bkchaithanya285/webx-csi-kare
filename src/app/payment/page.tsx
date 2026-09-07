@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
-import { CreditCard, Clock, Upload, CheckCircle2, AlertTriangle, ShieldCheck, Copy, Check } from "lucide-react";
+import { CreditCard, Clock, Upload, CheckCircle2, AlertTriangle, ShieldCheck, Copy, Check, Crown } from "lucide-react";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { submitTeamRegistration, getSystemSettings, getNextSequentialTeamId, Student } from "@/lib/db";
 
@@ -13,6 +13,10 @@ export default function PaymentPage() {
   const [draft, setDraft] = useState<{
     teamName: string;
     leadEmail: string;
+    leadName?: string;
+    leadRegNo?: string;
+    leaderIndex?: number;
+    accountEmail?: string;
     members: Student[];
     reservationId: string;
     expiresAt: number;
@@ -32,8 +36,10 @@ export default function PaymentPage() {
 
   const [utr, setUtr] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [uploadedUrl, setUploadedUrl] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string>("");
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -63,6 +69,11 @@ export default function PaymentPage() {
     }
     try {
       const parsed = JSON.parse(raw);
+      // Ensure team leader has been selected; if not, redirect to review page
+      if (parsed.leaderIndex === undefined || parsed.leaderIndex === null) {
+        router.push("/review");
+        return;
+      }
       setDraft(parsed);
 
       // Establish or restore 5-minute persistent seat lock expiry timestamp
@@ -111,13 +122,47 @@ export default function PaymentPage() {
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Immediately start upload as soon as file is selected
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
-      setUploadProgress(0);
       setPreviewUrl(URL.createObjectURL(selectedFile));
+      setUploadedUrl("");
+      setUploadError("");
+      setIsUploading(true);
+      setUploadProgress(10);
+
+      try {
+        const teamIdentifier = draft?.teamName || "WEB";
+        const url = await uploadToCloudinary({
+          file: selectedFile,
+          teamId: teamIdentifier,
+          onProgress: (pct) => setUploadProgress(pct),
+        });
+
+        if (url) {
+          setUploadedUrl(url);
+          setUploadProgress(100);
+          setIsUploading(false);
+        } else {
+          throw new Error("Upload returned empty image URL.");
+        }
+      } catch (err: any) {
+        console.error("Screenshot upload error:", err);
+        setIsUploading(false);
+        setUploadError("Screenshot upload failed. Please try re-selecting the file.");
+      }
     }
+  };
+
+  const handleClearImage = () => {
+    setFile(null);
+    setPreviewUrl(null);
+    setUploadedUrl("");
+    setUploadProgress(0);
+    setIsUploading(false);
+    setUploadError("");
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -138,42 +183,34 @@ export default function PaymentPage() {
       return;
     }
 
-    if (!file) {
-      setError("Mandatory: Please upload your payment screenshot.");
+    if (!uploadedUrl) {
+      setError("Mandatory: Please upload your payment screenshot and wait for the upload to complete.");
       return;
     }
 
     setSubmitting(true);
-    setIsUploading(true);
 
     try {
       // 1. Determine the assigned sequential Team ID (e.g. WEB-001, WEB-002...)
       const assignedTeamId = await getNextSequentialTeamId();
 
-      // 2. Upload Screenshot to Cloudinary named with the Team ID (e.g. WEB-001_payment_screenshot)
-      const imageUrl = await uploadToCloudinary({
-        file,
-        teamId: assignedTeamId,
-        onProgress: (percent) => setUploadProgress(percent),
-      });
-
-      setUploadProgress(100);
-      setIsUploading(false);
-
-      // 3. Submit Team Registration with this exact sequential Team ID
+      // 2. Submit Team Registration with the pre-uploaded screenshot URL
       const res = await submitTeamRegistration({
         teamId: assignedTeamId,
         teamName: draft.teamName,
         leadEmail: draft.leadEmail,
+        leadName: draft.leadName,
+        leadRegNo: draft.leadRegNo,
+        leaderIndex: draft.leaderIndex,
+        accountEmail: draft.accountEmail,
         members: draft.members,
         utrNumber: cleanUtr,
-        paymentScreenshotUrl: imageUrl,
+        paymentScreenshotUrl: uploadedUrl,
       });
 
       if (!res.success || !res.teamId) {
         setError(res.message || "Failed to submit registration. Please check your connection and try again.");
         setSubmitting(false);
-        setIsUploading(false);
         return;
       }
 
@@ -186,10 +223,12 @@ export default function PaymentPage() {
           teamId: confirmedTeamId,
           teamName: draft.teamName,
           leadEmail: draft.leadEmail,
+          leadName: draft.leadName,
+          leadRegNo: draft.leadRegNo,
           members: draft.members,
           utrNumber: cleanUtr,
           paymentStatus: "PENDING",
-          paymentScreenshotUrl: imageUrl,
+          paymentScreenshotUrl: uploadedUrl,
         })
       );
 
@@ -205,13 +244,19 @@ export default function PaymentPage() {
       console.error(err);
       setError(err.message || "An error occurred during submission.");
       setSubmitting(false);
-      setIsUploading(false);
     }
   };
 
   if (!draft) return null;
 
   const upiQrString = `upi://pay?pa=${upiId}&pn=WEBX%20Hackathon&am=${totalAmount}&cu=INR`;
+
+  const isSubmitDisabled =
+    submitting ||
+    isUploading ||
+    !uploadedUrl ||
+    timeLeft <= 0 ||
+    utr.trim().length !== 12;
 
   return (
     <div className="w-full max-w-4xl mx-auto py-6 px-4">
@@ -230,7 +275,30 @@ export default function PaymentPage() {
           </p>
         </div>
 
-        {/* 10-Minute Reservation Countdown */}
+        {/* Selected Team Leader Banner */}
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+              <Crown className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 block">
+                CONFIRMED TEAM LEADER
+              </span>
+              <span className="font-extrabold text-white text-sm sm:text-base">
+                {draft.leadName || (draft.leaderIndex !== undefined && draft.members[draft.leaderIndex]?.name)}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">REG NO:</span>
+            <span className="font-mono text-xs font-extrabold text-amber-300 bg-black/40 px-3 py-1 rounded-lg border border-amber-500/30">
+              {draft.leadRegNo || (draft.leaderIndex !== undefined && draft.members[draft.leaderIndex]?.regNo)}
+            </span>
+          </div>
+        </div>
+
+        {/* 5-Minute Reservation Countdown */}
         <div
           className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${
             timeLeft < 120
@@ -302,22 +370,15 @@ export default function PaymentPage() {
               <span className="font-extrabold uppercase tracking-wider text-gray-300 border-b border-white/10 pb-2">
                 FEE BREAKDOWN (STRICTLY 4 MEMBERS)
               </span>
-              <div className="flex justify-between text-gray-400">
-                <span>Member 1 ({draft.members[0]?.name}):</span>
-                <span className="font-mono text-white">₹350</span>
-              </div>
-              <div className="flex justify-between text-gray-400">
-                <span>Member 2 ({draft.members[1]?.name}):</span>
-                <span className="font-mono text-white">₹350</span>
-              </div>
-              <div className="flex justify-between text-gray-400">
-                <span>Member 3 ({draft.members[2]?.name}):</span>
-                <span className="font-mono text-white">₹350</span>
-              </div>
-              <div className="flex justify-between text-gray-400">
-                <span>Member 4 ({draft.members[3]?.name}):</span>
-                <span className="font-mono text-white">₹350</span>
-              </div>
+              {draft.members.map((m, idx) => (
+                <div key={idx} className="flex justify-between text-gray-400">
+                  <span>
+                    Member {idx + 1} ({m.name || `Participant ${idx + 1}`})
+                    {idx === draft.leaderIndex ? " 👑 (Leader)" : ""}:
+                  </span>
+                  <span className="font-mono text-white">₹350</span>
+                </div>
+              ))}
               <div className="h-px bg-white/10 my-1" />
               <div className="flex justify-between font-extrabold text-sm text-red-400">
                 <span>TOTAL AMOUNT:</span>
@@ -361,26 +422,40 @@ export default function PaymentPage() {
                 />
                 <Upload className="w-8 h-8 text-red-500 mb-2" />
                 <span className="text-xs font-bold text-gray-200">
-                  {file ? file.name : "Click to Upload Screenshot"}
+                  {file ? file.name : "Click to Select & Upload Screenshot"}
                 </span>
-                <span className="text-[10px] text-gray-400 mt-1">PNG, JPG or WEBP up to 10MB</span>
+                <span className="text-[10px] text-gray-400 mt-1">PNG, JPG or WEBP (Uploads immediately upon selection)</span>
               </label>
             </div>
+
+            {/* Upload Error Banner */}
+            {uploadError && (
+              <div className="p-3 rounded-xl bg-red-950/90 border border-red-500/70 text-red-200 text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
 
             {/* Live Screenshot Image Preview */}
             {previewUrl && (
               <div className="flex flex-col gap-2 p-3 rounded-2xl glass-card border border-red-500/40 bg-slate-950/80 animate-in fade-in">
                 <div className="flex items-center justify-between text-xs font-bold text-gray-200 border-b border-white/10 pb-2">
-                  <span className="text-emerald-400 font-bold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Screenshot Loaded Preview
+                  <span className={`font-bold flex items-center gap-1.5 ${uploadedUrl ? "text-emerald-400" : "text-amber-400"}`}>
+                    {uploadedUrl ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Screenshot Uploaded Successfully</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-4 h-4 animate-spin" />
+                        <span>Uploading Screenshot...</span>
+                      </>
+                    )}
                   </span>
                   <button
                     type="button"
-                    onClick={() => {
-                      setFile(null);
-                      setPreviewUrl(null);
-                    }}
+                    onClick={handleClearImage}
                     className="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5 rounded bg-red-950/80 border border-red-500/30 text-[10px] uppercase"
                   >
                     Change Image
@@ -398,14 +473,34 @@ export default function PaymentPage() {
 
             {/* Cloudinary Progress Bar */}
             {(isUploading || uploadProgress > 0) && (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5 p-3 rounded-xl bg-black/40 border border-white/10 animate-in fade-in">
                 <div className="flex justify-between text-xs font-bold">
-                  <span className="text-gray-300">Cloudinary Upload Progress:</span>
-                  <span className="text-red-400 font-mono">{uploadProgress}%</span>
+                  <span className="flex items-center gap-2 text-gray-200">
+                    {isUploading ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                        <span>Uploading screenshot to Cloudinary...</span>
+                      </>
+                    ) : uploadedUrl ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="text-emerald-400">Screenshot Uploaded & Verified</span>
+                      </>
+                    ) : (
+                      <span>Upload Incomplete</span>
+                    )}
+                  </span>
+                  <span className={`font-mono font-bold ${uploadedUrl ? "text-emerald-400" : "text-amber-400"}`}>
+                    {uploadProgress}%
+                  </span>
                 </div>
                 <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-white/10">
                   <div
-                    className="h-full bg-gradient-to-r from-red-600 to-amber-500 rounded-full transition-all duration-300"
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      uploadedUrl
+                        ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                        : "bg-gradient-to-r from-red-600 via-amber-500 to-yellow-400"
+                    }`}
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
@@ -415,11 +510,27 @@ export default function PaymentPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={submitting || timeLeft <= 0}
-              className="w-full py-4 mt-2 rounded-xl glass-btn-primary font-extrabold uppercase tracking-widest text-sm sm:text-base flex items-center justify-center gap-3 shadow-xl shadow-red-950/70"
+              disabled={isSubmitDisabled}
+              className={`w-full py-4 mt-2 rounded-xl font-extrabold uppercase tracking-widest text-sm sm:text-base flex items-center justify-center gap-3 transition-all ${
+                isSubmitDisabled
+                  ? "bg-slate-800 text-gray-500 border border-white/5 cursor-not-allowed shadow-none opacity-60"
+                  : "glass-btn-primary shadow-xl shadow-red-950/70"
+              }`}
             >
-              <CheckCircle2 className="w-5 h-5" />
-              <span>{submitting ? "SUBMITTING PAYMENT..." : "SUBMIT PAYMENT PROOF"}</span>
+              {submitting ? (
+                <span>SUBMITTING PAYMENT...</span>
+              ) : isUploading ? (
+                <span>UPLOADING SCREENSHOT ({uploadProgress}%)...</span>
+              ) : !uploadedUrl ? (
+                <span>UPLOAD SCREENSHOT TO ENABLE SUBMIT</span>
+              ) : utr.trim().length !== 12 ? (
+                <span>ENTER 12-DIGIT UTR TO SUBMIT</span>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                  <span>SUBMIT PAYMENT PROOF</span>
+                </>
+              )}
             </button>
 
             <div className="p-3 rounded-xl bg-white/5 border border-white/5 text-[11px] text-gray-400 flex items-center gap-2">

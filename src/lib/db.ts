@@ -31,6 +31,10 @@ export interface TeamData {
   teamId?: string; // e.g. WEB-001
   teamName: string;
   leadEmail: string;
+  leadName?: string;
+  leadRegNo?: string;
+  leaderIndex?: number;
+  accountEmail?: string;
   members: Student[];
   paymentStatus: "PENDING" | "VERIFIED" | "REJECTED";
   utrNumber: string;

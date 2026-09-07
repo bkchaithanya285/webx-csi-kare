@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, User, ArrowLeft, ArrowRight, ShieldCheck, CreditCard, Clock } from "lucide-react";
+import { Users, User, ArrowLeft, ArrowRight, CreditCard, Clock, Crown, Check, AlertTriangle } from "lucide-react";
 import { Student } from "@/lib/db";
 
 export default function ReviewPage() {
@@ -10,10 +10,17 @@ export default function ReviewPage() {
   const [draft, setDraft] = useState<{
     teamName: string;
     leadEmail: string;
+    leadName?: string;
+    leadRegNo?: string;
+    leaderIndex?: number;
+    accountEmail?: string;
     members: Student[];
     reservationId: string;
     expiresAt: number;
   } | null>(null);
+
+  const [selectedLeaderIndex, setSelectedLeaderIndex] = useState<number | null>(null);
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     sessionStorage.setItem("webx_registration_step", "review");
@@ -34,11 +41,40 @@ export default function ReviewPage() {
       return;
     }
     try {
-      setDraft(JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      setDraft(parsed);
+      if (typeof parsed.leaderIndex === "number" && parsed.leaderIndex >= 0 && parsed.leaderIndex < 4) {
+        setSelectedLeaderIndex(parsed.leaderIndex);
+      }
     } catch (e) {
       router.push("/register");
     }
   }, [router]);
+
+  const handleProceedToPayment = () => {
+    if (!draft) return;
+    if (selectedLeaderIndex === null || selectedLeaderIndex < 0 || selectedLeaderIndex >= draft.members.length) {
+      setError("Please select the Team Leader by clicking on one of the four members above before entering the payment page.");
+      const el = document.getElementById("select-team-leader");
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+
+    const leaderMember = draft.members[selectedLeaderIndex];
+
+    const updatedDraft = {
+      ...draft,
+      leaderIndex: selectedLeaderIndex,
+      leadName: leaderMember.name,
+      leadRegNo: leaderMember.regNo,
+      leadEmail: leaderMember.email || draft.leadEmail,
+      accountEmail: draft.leadEmail,
+    };
+
+    sessionStorage.setItem("webx_draft_team", JSON.stringify(updatedDraft));
+    sessionStorage.setItem("webx_registration_step", "payment");
+    router.push("/payment");
+  };
 
   if (!draft) {
     return (
@@ -61,7 +97,7 @@ export default function ReviewPage() {
             REVIEW TEAM DETAILS
           </h2>
           <p className="text-xs sm:text-sm text-gray-400">
-            Please double-check all 4 team members' SIS information before proceeding to payment.
+            Please double-check all 4 team members' SIS information and select the Team Leader before proceeding to payment.
           </p>
         </div>
 
@@ -135,6 +171,83 @@ export default function ReviewPage() {
           ))}
         </div>
 
+        {/* SELECT TEAM LEADER (REQUIRED BEFORE PAYMENT) */}
+        <div id="select-team-leader" className="flex flex-col gap-4 pt-2">
+          <div className="flex flex-col gap-1 border-t border-white/10 pt-6">
+            <div className="flex items-center gap-2">
+              <Crown className="w-5 h-5 text-amber-400 animate-pulse" />
+              <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-wider">
+                SELECT TEAM LEADER <span className="text-red-500">*</span>
+              </h3>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-300">
+              Select who among the four participants will lead the team before entering the payment page:
+            </p>
+          </div>
+
+          {error && (
+            <div className="p-4 rounded-xl bg-red-950/90 border border-red-500/80 text-red-200 text-xs sm:text-sm font-semibold flex items-center gap-3 animate-in fade-in">
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            {draft.members.map((m, idx) => {
+              const isSelected = selectedLeaderIndex === idx;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setSelectedLeaderIndex(idx);
+                    setError("");
+                  }}
+                  className={`p-4 rounded-2xl text-left transition-all border flex items-center justify-between gap-3 ${
+                    isSelected
+                      ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-transparent border-amber-400 shadow-lg shadow-amber-950/50 ring-2 ring-amber-400/50"
+                      : "bg-slate-900/60 border-white/10 hover:border-amber-400/40 hover:bg-slate-900/90"
+                  }`}
+                >
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                        MEMBER {idx + 1}
+                      </span>
+                      {isSelected && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500 text-black font-black text-[10px] tracking-wider uppercase flex items-center gap-1 shadow">
+                          <Crown className="w-3 h-3" /> TEAM LEADER
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-base sm:text-lg font-extrabold text-white truncate">
+                      {m.name || `Participant ${idx + 1}`}
+                    </span>
+                    <span className="text-xs font-mono text-amber-300 font-bold tracking-wider">
+                      REG NO: {m.regNo || "N/A"}
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      {m.department} • Year {m.year}
+                    </span>
+                  </div>
+
+                  <div className="shrink-0">
+                    <div
+                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                        isSelected
+                          ? "border-amber-400 bg-amber-400 text-black"
+                          : "border-gray-500 bg-transparent"
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Actions: EDIT & PROCEED TO PAYMENT */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-white/10">
           <button
@@ -149,10 +262,7 @@ export default function ReviewPage() {
           </button>
 
           <button
-            onClick={() => {
-              sessionStorage.setItem("webx_registration_step", "payment");
-              router.push("/payment");
-            }}
+            onClick={handleProceedToPayment}
             className="w-full sm:w-auto px-8 py-4 rounded-xl glass-btn-primary font-extrabold text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-red-950/60"
           >
             <CreditCard className="w-5 h-5" />

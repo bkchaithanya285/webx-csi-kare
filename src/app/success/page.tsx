@@ -18,6 +18,8 @@ export default function SuccessPage() {
     teamId: string;
     teamName: string;
     leadEmail: string;
+    leadName?: string;
+    leadRegNo?: string;
     members: Student[];
     utrNumber: string;
     paymentStatus: string;

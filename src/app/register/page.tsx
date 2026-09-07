@@ -84,16 +84,9 @@ export default function RegisterPage() {
       }
     } catch (e) {}
 
-    // 2. If no draft found, initialize default Member 1 with team lead details
+    // 2. If no draft found, leave members blank to be filled freely
     if (!restored) {
-      setMembers((prev) => {
-        const next = [...prev];
-        next[0].email = email;
-        if (!next[0].regNo && prefix) {
-          next[0].regNo = prefix;
-        }
-        return next;
-      });
+      // members start clean without assuming member 1 is leader
     }
   }, [router]);
 
@@ -164,9 +157,8 @@ export default function RegisterPage() {
       localStorage.removeItem("webx_reg_form_autosave");
       setTeamName("");
       setActiveTab(0);
-      const prefix = leadEmail.split("@")[0].trim().toUpperCase();
       setMembers([
-        { name: "", regNo: prefix, department: "", year: "", section: "", mobile: "", gender: "", accommodation: "Day Scholar", email: leadEmail },
+        { name: "", regNo: "", department: "", year: "", section: "", mobile: "", gender: "", accommodation: "Day Scholar", email: "" },
         { name: "", regNo: "", department: "", year: "", section: "", mobile: "", gender: "", accommodation: "Day Scholar", email: "" },
         { name: "", regNo: "", department: "", year: "", section: "", mobile: "", gender: "", accommodation: "Day Scholar", email: "" },
         { name: "", regNo: "", department: "", year: "", section: "", mobile: "", gender: "", accommodation: "Day Scholar", email: "" },
@@ -199,6 +191,23 @@ export default function RegisterPage() {
         return;
       }
       regNosSet.add(reg);
+    }
+
+    // Enforce that the fixed university email from team info belongs to at least one team member
+    const fixedEmailLower = leadEmail.trim().toLowerCase();
+    const fixedPrefix = fixedEmailLower.split("@")[0].toUpperCase();
+
+    const hasFixedEmailMember = members.some((m) => {
+      const mEmail = (m.email || "").trim().toLowerCase();
+      const mReg = (m.regNo || "").trim().toUpperCase();
+      return mEmail === fixedEmailLower || mReg === fixedPrefix;
+    });
+
+    if (!hasFixedEmailMember) {
+      setError(
+        `The registered university account email (${leadEmail}) must belong to at least one team member in the team.`
+      );
+      return;
     }
 
     setLoading(true);
@@ -365,7 +374,7 @@ export default function RegisterPage() {
                   : "text-gray-400 hover:text-white"
               }`}
             >
-              <span>{num === 1 ? "Mem 1 (Leader)" : `Mem ${num}`}</span>
+              <span>{`Mem ${num}`}</span>
             </button>
           ))}
         </div>
@@ -391,9 +400,12 @@ export default function RegisterPage() {
               <span className="text-xs text-gray-400">Team names are checked globally and must be unique.</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
-              <span className="text-sm text-gray-300 font-medium">Team Lead Account:</span>
-              <span className="text-sm font-extrabold text-red-400 bg-red-950/60 px-3 py-1 rounded-lg border border-red-500/30">
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span className="text-sm text-gray-300 font-medium">Registered University Account:</span>
+                <p className="text-xs text-gray-400 mt-0.5">This fixed email must belong to at least one member in the team.</p>
+              </div>
+              <span className="text-sm font-extrabold text-red-400 bg-red-950/60 px-3 py-1 rounded-lg border border-red-500/30 font-mono w-fit">
                 {leadEmail}
               </span>
             </div>
@@ -403,7 +415,7 @@ export default function RegisterPage() {
               onClick={() => setActiveTab(1)}
               className="w-full py-4 rounded-xl glass-btn-primary font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2"
             >
-              <span>Proceed to Member 1 (Team Leader) Details</span>
+              <span>Proceed to Member 1 Details</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -416,13 +428,8 @@ export default function RegisterPage() {
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
                   <User className="w-5 h-5" />
-                  <span>{activeTab === 1 ? "MEMBER 1 (TEAM LEADER)" : `PARTICIPANT ${activeTab} OF 4`}</span>
+                  <span>{`PARTICIPANT ${activeTab} OF 4 (MEMBER ${activeTab})`}</span>
                 </h3>
-                {activeTab === 1 && (
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-extrabold tracking-wider uppercase">
-                    TEAM LEADER
-                  </span>
-                )}
               </div>
               <span className="text-xs font-semibold text-gray-400">
                 Member Fee: ₹350

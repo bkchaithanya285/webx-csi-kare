@@ -343,7 +343,7 @@ export default function LandingPage() {
                   CHAMPION
                 </span>
                 <span className="text-2xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-500 filter drop-shadow-[0_0_20px_rgba(234,179,8,0.5)] mt-0.5">
-                  ₹7,000
+                  ₹6,000
                 </span>
               </div>
 
@@ -377,7 +377,7 @@ export default function LandingPage() {
                   3RD PLACE
                 </span>
                 <span className="text-xl sm:text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-orange-400 to-amber-600 mt-0.5">
-                  ₹3,000
+                  ₹4,000
                 </span>
               </div>
 
