@@ -20,13 +20,16 @@ import {
   Clock, 
   LogIn,
   FileImage,
-  Printer 
+  Printer,
+  Edit3,
+  Lock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getTeamByCodeOrEmail, TeamData } from "@/lib/db";
 import { getTeamLeadInfo } from "@/lib/teamUtils";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { TeamLeadEditModal } from "@/components/TeamLeadEditModal";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -35,6 +38,8 @@ export default function DashboardPage() {
   const [leadEmail, setLeadEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingType, setDownloadingType] = useState<"pdf" | "image" | null>(null);
+  const [showLeadEditModal, setShowLeadEditModal] = useState(false);
+  const [editSuccessMsg, setEditSuccessMsg] = useState("");
   const loadedEmailRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -234,11 +239,69 @@ export default function DashboardPage() {
   const qrVerifyUrl = `${origin}/verify/${team.teamId || team.id}`;
 
   const leadInfo = team ? getTeamLeadInfo(team) : null;
+  const isCurrentLead = Boolean(
+    leadEmail &&
+    leadInfo &&
+    (leadEmail.toLowerCase() === (leadInfo.leadEmail || team?.leadEmail || "").toLowerCase() ||
+     (leadInfo.leadRegNo && leadEmail.split("@")[0].toUpperCase() === leadInfo.leadRegNo.toUpperCase()))
+  );
 
   // 4. Team Found -> Render Live Event Pass & Details
   return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-8">
+    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-6">
       
+      {/* SUCCESS UPDATE NOTIFICATION */}
+      {editSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-950/90 border border-emerald-500 text-emerald-100 text-xs font-bold flex items-center gap-2.5 shadow-xl animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span>{editSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* ONE-TIME EDIT BANNER FOR TEAM LEAD */}
+      {isCurrentLead && !team.hasEditedDetails && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/50 via-slate-900 to-amber-950/50 border border-amber-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-black/40">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+              <Edit3 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <strong className="text-sm text-white font-bold">
+                  One-Time Team Details Edit Available
+                </strong>
+                <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[9px] font-black uppercase tracking-wider">
+                  TEAM LEAD ONLY
+                </span>
+              </div>
+              <p className="text-xs text-amber-200/90 mt-1 leading-relaxed">
+                As the official Team Lead, you have one opportunity to review and update your teammates&apos; details before the event. Once submitted, details are permanently locked.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowLeadEditModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shrink-0 transition-all flex items-center gap-2 shadow-lg hover:scale-105 cursor-pointer"
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>Edit Details (One-Time)</span>
+          </button>
+        </div>
+      )}
+
+      {/* ONE-TIME EDIT USED BADGE FOR TEAM LEAD */}
+      {isCurrentLead && team.hasEditedDetails && (
+        <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 flex items-center justify-between gap-3 text-xs text-gray-400">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Team details have been confirmed and locked for WEBX 2026. (One-time edit completed).</span>
+          </div>
+          <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider text-emerald-400 shrink-0">
+            VERIFIED & LOCKED
+          </span>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
         <div>
@@ -269,6 +332,17 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Edit Button in Header if Lead and not edited yet */}
+          {isCurrentLead && !team.hasEditedDetails && (
+            <button
+              onClick={() => setShowLeadEditModal(true)}
+              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-amber-950/40 hover:scale-105 transition-all cursor-pointer"
+            >
+              <Edit3 className="w-4 h-4" />
+              <span>Edit Details</span>
+            </button>
+          )}
+
           <button
             onClick={handleDownloadPassPDF}
             disabled={downloadingType !== null}
@@ -483,6 +557,20 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      {/* ONE-TIME TEAM LEAD EDIT MODAL */}
+      {showLeadEditModal && team && (
+        <TeamLeadEditModal
+          isOpen={showLeadEditModal}
+          onClose={() => setShowLeadEditModal(false)}
+          team={team}
+          onSuccess={(updatedTeam) => {
+            setTeam(updatedTeam);
+            setEditSuccessMsg("Team details successfully updated! Your live pass and admission records are updated.");
+            setTimeout(() => setEditSuccessMsg(""), 5000);
+          }}
+        />
+      )}
 
     </div>
   );

@@ -44,6 +44,8 @@ export interface TeamData {
   createdAt: any;
   updatedAt: any;
   rejectionReason?: string;
+  hasEditedDetails?: boolean;
+  editedAt?: any;
 }
 
 export interface ReservationData {
@@ -834,20 +836,47 @@ export async function getTeamByCodeOrEmail(identifier: string): Promise<TeamData
   }
 }
 
-// Update Team & Teammates Details (Admin Operation)
+// Update Team & Teammates Details (Admin Operation & Team Lead Edit)
 export async function updateTeamDetails(
   teamDocId: string,
   updates: Partial<TeamData>
 ): Promise<{ success: boolean; message?: string }> {
   try {
-    const teamRef = doc(db, "teams", teamDocId);
-    await updateDoc(teamRef, {
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    });
-    // Invalidate memory cache so dashboard and public pages get the updated record immediately
-    teamMemoryCache.clear();
-    return { success: true };
+    // 1. Try direct doc ID match first
+    const directRef = doc(db, "teams", teamDocId);
+    const directSnap = await getDoc(directRef).catch(() => null);
+    if (directSnap && directSnap.exists()) {
+      await updateDoc(directRef, {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      });
+      teamMemoryCache.clear();
+      return { success: true };
+    }
+
+    // 2. Locate by teamId or leadEmail across teams collection
+    const snap = await getDocs(collection(db, "teams"));
+    if (snap && !snap.empty) {
+      const cleanUpper = teamDocId.trim().toUpperCase();
+      const cleanLower = teamDocId.trim().toLowerCase();
+      for (const d of snap.docs) {
+        const t = d.data() as TeamData;
+        if (
+          d.id === teamDocId ||
+          t.teamId?.trim().toUpperCase() === cleanUpper ||
+          t.leadEmail?.trim().toLowerCase() === cleanLower
+        ) {
+          await updateDoc(doc(db, "teams", d.id), {
+            ...updates,
+            updatedAt: new Date().toISOString(),
+          });
+          teamMemoryCache.clear();
+          return { success: true };
+        }
+      }
+    }
+
+    return { success: false, message: "Team record not found." };
   } catch (error: any) {
     console.error("Error updating team details:", error);
     return { success: false, message: error?.message || "Failed to update team details." };

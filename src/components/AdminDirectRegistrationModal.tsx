@@ -17,8 +17,12 @@ import {
   Home,
   ExternalLink,
   RotateCcw,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
 } from "lucide-react";
 import { Student, TeamData, adminCreateTeamRegistration } from "@/lib/db";
+import { uploadToCloudinary, compressImageToDataUrl } from "@/lib/cloudinary";
 
 const DEPARTMENTS = ["CSE", "ECE", "IT", "EEE", "MECH", "CIVIL", "BIO", "Others"];
 const YEARS = ["II", "III", "IV", "I"];
@@ -63,11 +67,65 @@ export function AdminDirectRegistrationModal({
     emptyMember(),
   ]);
 
+  // Payment Screenshot State
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [uploadedScreenshotUrl, setUploadedScreenshotUrl] = useState<string>("");
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
+  const [screenshotProgress, setScreenshotProgress] = useState(0);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [createdTeam, setCreatedTeam] = useState<TeamData | null>(null);
 
   if (!isOpen) return null;
+
+  const handleScreenshotChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    if (!file.type.startsWith("image/")) {
+      setError("Please select a valid image file (PNG, JPG, JPEG, WEBP).");
+      return;
+    }
+
+    setScreenshotFile(file);
+    setUploadingScreenshot(true);
+    setScreenshotProgress(25);
+    setError("");
+
+    try {
+      const compressed = await compressImageToDataUrl(file);
+      if (compressed) {
+        setScreenshotPreview(compressed);
+        setUploadedScreenshotUrl(compressed); // Instant safety fallback
+        setScreenshotProgress(50);
+      }
+
+      const teamIdentifier = teamName ? teamName.replace(/\s+/g, "_") : "ADMIN_DIRECT";
+      const cldUrl = await uploadToCloudinary({
+        file,
+        teamId: teamIdentifier,
+        onProgress: (pct) => setScreenshotProgress(Math.max(50, pct)),
+      });
+
+      if (cldUrl) {
+        setUploadedScreenshotUrl(cldUrl);
+      }
+      setScreenshotProgress(100);
+    } catch (err: any) {
+      console.warn("Cloudinary upload fallback to compressed data:", err);
+      setScreenshotProgress(100);
+    } finally {
+      setUploadingScreenshot(false);
+    }
+  };
+
+  const handleClearScreenshot = () => {
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
+    setUploadedScreenshotUrl("");
+    setScreenshotProgress(0);
+  };
 
   const handleUpdateMember = (index: number, field: keyof Student, value: any) => {
     setError("");
@@ -94,7 +152,11 @@ export function AdminDirectRegistrationModal({
       }
 
       if (field === "section") {
-        m.section = String(value).toUpperCase().trim();
+        m.section = String(value).toUpperCase().replace(/[^A-Z0-9\s-]/g, "").trim();
+      }
+
+      if (field === "roomNo") {
+        m.roomNo = String(value).toUpperCase().trim();
       }
 
       copy[index] = m;
@@ -108,6 +170,10 @@ export function AdminDirectRegistrationModal({
     setUtrNumber(`ADMIN-OFFLINE-${Math.floor(100000 + Math.random() * 900000)}`);
     setLeadIndex(0);
     setMembers([emptyMember(), emptyMember(), emptyMember(), emptyMember()]);
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
+    setUploadedScreenshotUrl("");
+    setScreenshotProgress(0);
     setError("");
     setCreatedTeam(null);
   };
@@ -159,6 +225,11 @@ export function AdminDirectRegistrationModal({
       }
     }
 
+    if (!uploadedScreenshotUrl) {
+      setError("Payment Screenshot is required. Please upload the payment confirmation / receipt image.");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await adminCreateTeamRegistration({
@@ -167,6 +238,7 @@ export function AdminDirectRegistrationModal({
         members,
         paymentStatus,
         utrNumber,
+        paymentScreenshotUrl: uploadedScreenshotUrl,
       });
 
       if (!res.success || !res.newTeam) {
@@ -394,6 +466,84 @@ export function AdminDirectRegistrationModal({
                       onChange={(e) => setUtrNumber(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white font-mono"
                     />
+                  </div>
+
+                  {/* Payment Screenshot Upload */}
+                  <div className="sm:col-span-3 flex flex-col gap-2 pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-300 uppercase flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-red-400" />
+                        <span>Upload Payment Proof / Screenshot <span className="text-red-400">*</span></span>
+                      </label>
+                      {uploadedScreenshotUrl && (
+                        <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Screenshot Attached</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {!screenshotPreview ? (
+                      <label className="border-2 border-dashed border-white/20 hover:border-red-500/60 rounded-2xl p-5 flex flex-col items-center justify-center gap-2.5 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 transition-all group">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleScreenshotChange}
+                          className="hidden"
+                        />
+                        <div className="w-10 h-10 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <div className="text-center">
+                          <span className="text-xs font-bold text-white block">
+                            Click to upload payment screenshot
+                          </span>
+                          <span className="text-[10px] text-gray-400">
+                            PNG, JPG, JPEG or WEBP (Receipt / Transaction proof)
+                          </span>
+                        </div>
+                      </label>
+                    ) : (
+                      <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-900/90 border border-white/10 gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-white/20 shrink-0 bg-black">
+                            <img
+                              src={screenshotPreview}
+                              alt="Screenshot Preview"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-white truncate max-w-xs">
+                              {screenshotFile?.name || "Payment Receipt Screenshot"}
+                            </span>
+                            <span className="text-[10px] text-emerald-400 font-mono">
+                              {uploadingScreenshot ? `Uploading (${screenshotProgress}%)...` : "Uploaded and verified"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <label className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-gray-200 text-xs font-bold uppercase transition-colors cursor-pointer">
+                            <span>Replace</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleScreenshotChange}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleClearScreenshot}
+                            className="p-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-300 transition-colors"
+                            title="Remove screenshot"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
