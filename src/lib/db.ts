@@ -547,8 +547,22 @@ export async function submitTeamRegistration(
       safeScreenshotUrl = safeScreenshotUrl.substring(0, 750000);
     }
 
+    const sanitizedMembers = (data.members || []).map((m) => ({
+      ...m,
+      name: (m.name || "")
+        .toUpperCase()
+        .replace(/\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji}|\p{Symbol}/gu, "")
+        .replace(/[^A-Z\s.]/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim(),
+      regNo: (m.regNo || "").trim().toUpperCase(),
+      section: (m.section || "").trim().toUpperCase(),
+    }));
+
     const newTeam: TeamData = {
       ...data,
+      leadName: (data.leadName || sanitizedMembers[0]?.name || "").trim().toUpperCase(),
+      members: sanitizedMembers,
       paymentScreenshotUrl: safeScreenshotUrl,
       id: newTeamRef.id,
       teamId: formattedId,

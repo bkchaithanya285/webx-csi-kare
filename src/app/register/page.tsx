@@ -24,6 +24,20 @@ const formatTeamName = (val: string): string => {
     .replace(/^\s+/, "");
 };
 
+// Sanitizes member name: uppercase block letters only, single spaces, dots allowed
+const formatPersonName = (val: string): string => {
+  return val
+    .toUpperCase()
+    // Strip all emoji characters and pictographs
+    .replace(/\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji}|\p{Symbol}/gu, "")
+    // Keep only letters, single spaces, and periods (e.g. for initials like K. V. RAO)
+    .replace(/[^A-Z\s.]/g, "")
+    // Disallow multiple consecutive spaces
+    .replace(/\s{2,}/g, " ")
+    // Disallow leading whitespace
+    .replace(/^\s+/, "");
+};
+
 export default function RegisterPage() {
   const router = useRouter();
   const [teamName, setTeamName] = useState("");
@@ -95,7 +109,12 @@ export default function RegisterPage() {
           if (saved.teamName) setTeamName(saved.teamName);
           if (typeof saved.activeTab === "number") setActiveTab(saved.activeTab);
           if (Array.isArray(saved.members) && saved.members.length === 4) {
-            setMembers(saved.members);
+            setMembers(
+              saved.members.map((m: any) => ({
+                ...m,
+                name: formatPersonName(m?.name || ""),
+              }))
+            );
             restored = true;
           }
         }
@@ -113,6 +132,11 @@ export default function RegisterPage() {
     setMembers((prev) => {
       const next = [...prev];
       const m = { ...next[index], [field]: value };
+
+      // Auto-sanitize and uppercase name: strictly block letters only
+      if (field === "name") {
+        m.name = formatPersonName(String(value));
+      }
 
       // Auto-sanitize regNo: uppercase, alphanumeric only, no spaces
       if (field === "regNo") {
@@ -151,6 +175,9 @@ export default function RegisterPage() {
 
   const validateMember = (m: Student, idx: number): string | null => {
     if (!m.name.trim()) return `Member ${idx + 1}: Name as per SIS is required.`;
+    if (!/^[A-Z\s.]+$/.test(m.name.trim())) {
+      return `Member ${idx + 1}: Name must be in BLOCK LETTERS only.`;
+    }
     if (!m.regNo.trim()) return `Member ${idx + 1}: Registration Number is required.`;
     if (!/^[a-zA-Z0-9]{8,14}$/.test(m.regNo.trim())) return `Member ${idx + 1}: Valid Registration Number required.`;
     if (!m.email || !m.email.toLowerCase().endsWith("@klu.ac.in")) {
@@ -370,16 +397,25 @@ export default function RegisterPage() {
       return;
     }
 
+    // Normalize and sanitize all 4 members with block letters
+    const cleanMembers = members.map((m) => ({
+      ...m,
+      name: formatPersonName(m.name).trim(),
+      regNo: m.regNo.trim().toUpperCase(),
+      section: m.section.trim().toUpperCase(),
+    }));
+    setMembers(cleanMembers);
+
     // Validate all 4 members
     const regNosSet = new Set<string>();
     for (let i = 0; i < 4; i++) {
-      const err = validateMember(members[i], i);
+      const err = validateMember(cleanMembers[i], i);
       if (err) {
         setError(err);
         setActiveTab(i + 1);
         return;
       }
-      const reg = members[i].regNo.trim().toUpperCase();
+      const reg = cleanMembers[i].regNo;
       if (regNosSet.has(reg)) {
         setError(`Duplicate registration number "${reg}" within your team! Each participant must be unique.`);
         setActiveTab(i + 1);
@@ -392,7 +428,7 @@ export default function RegisterPage() {
     const fixedEmailLower = leadEmail.trim().toLowerCase();
     const fixedPrefix = fixedEmailLower.split("@")[0].toUpperCase();
 
-    const hasFixedEmailMember = members.some((m) => {
+    const hasFixedEmailMember = cleanMembers.some((m) => {
       const mEmail = (m.email || "").trim().toLowerCase();
       const mReg = (m.regNo || "").trim().toUpperCase();
       return mEmail === fixedEmailLower || mReg === fixedPrefix;
@@ -461,10 +497,10 @@ export default function RegisterPage() {
         JSON.stringify({
           teamName: cleanTeam,
           leadEmail,
-          leadName: members[0]?.name || "",
-          leadRegNo: members[0]?.regNo || "",
+          leadName: cleanMembers[0]?.name || "",
+          leadRegNo: cleanMembers[0]?.regNo || "",
           leaderIndex: 0,
-          members,
+          members: cleanMembers,
           reservationId: resId,
           expiresAt: expiryTime,
         })
@@ -690,11 +726,12 @@ export default function RegisterPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Full Name as per University SIS"
+                  placeholder="E.G. SAI KRISHNA V"
                   value={members[activeTab - 1].name}
                   onChange={(e) => updateMember(activeTab - 1, "name", e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl glass-input text-sm text-white"
+                  className="w-full px-4 py-3 rounded-xl glass-input text-sm text-white uppercase font-semibold tracking-wide"
                 />
+                <span className="text-[10px] text-gray-400">Must be in BLOCK LETTERS as per university SIS record.</span>
               </div>
 
               {/* Registration Number */}
