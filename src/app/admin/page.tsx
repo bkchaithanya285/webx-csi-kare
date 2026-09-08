@@ -316,6 +316,20 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    // Check duplicate team name with other teams in memory
+    const cleanNewTeamName = editTeamName.trim().toUpperCase();
+    const otherTeamWithSameName = teams.find(
+      (t) =>
+        t.teamId !== selectedTeam.teamId &&
+        t.id !== selectedTeam.id &&
+        t.teamName?.trim().toUpperCase() === cleanNewTeamName
+    );
+    if (otherTeamWithSameName) {
+      setEditError(`Team Name "${cleanNewTeamName}" is already taken by Team ${otherTeamWithSameName.teamId}. Please choose a unique name.`);
+      return;
+    }
+
+    const seenRegNos = new Set<string>();
     for (let i = 0; i < editMembers.length; i++) {
       const m = editMembers[i];
       if (!m.name.trim()) {
@@ -326,8 +340,29 @@ export default function AdminDashboardPage() {
         setEditError(`Member ${i + 1} Registration Number is required.`);
         return;
       }
+      const cleanReg = m.regNo.trim().toUpperCase();
+      if (seenRegNos.has(cleanReg)) {
+        setEditError(`Duplicate registration number "${cleanReg}" found within this team (Member ${i + 1}).`);
+        return;
+      }
+      seenRegNos.add(cleanReg);
+
       if (!m.email.trim()) {
         setEditError(`Member ${i + 1} Email is required.`);
+        return;
+      }
+    }
+
+    // Check if any registration number belongs to another registered team
+    for (const reg of Array.from(seenRegNos)) {
+      const conflictTeam = teams.find(
+        (t) =>
+          t.teamId !== selectedTeam.teamId &&
+          t.id !== selectedTeam.id &&
+          t.members?.some((tm) => tm.regNo?.trim().toUpperCase() === reg)
+      );
+      if (conflictTeam) {
+        setEditError(`Registration number "${reg}" is already registered under Team "${conflictTeam.teamName}" (${conflictTeam.teamId}).`);
         return;
       }
     }
@@ -343,18 +378,12 @@ export default function AdminDashboardPage() {
 
       const cleanLeadName = leadMember.name.trim().toUpperCase();
       const cleanLeadEmail = leadMember.email.trim().toLowerCase();
-      const cleanLeadRegNo = (
-        selectedTeam.members[targetLeadIndex]?.regNo ||
-        leadMember.regNo ||
-        ""
-      )
-        .trim()
-        .toUpperCase();
+      const cleanLeadRegNo = (leadMember.regNo || "").trim().toUpperCase();
 
-      const sanitizedMembers = editMembers.map((m, idx) => ({
+      const sanitizedMembers = editMembers.map((m) => ({
         ...m,
         name: m.name.trim().toUpperCase(),
-        regNo: (selectedTeam.members[idx]?.regNo || m.regNo || "").trim().toUpperCase(), // strictly immutable locked
+        regNo: m.regNo.trim().toUpperCase(),
         department: m.department.trim().toUpperCase(),
         year: m.year.trim().toUpperCase(),
         section: m.section.trim().toUpperCase(),
@@ -367,7 +396,7 @@ export default function AdminDashboardPage() {
       }));
 
       const updates: Partial<TeamData> = {
-        teamName: selectedTeam.teamName, // strictly locked
+        teamName: cleanNewTeamName,
         utrNumber: selectedTeam.utrNumber || "", // strictly locked
         leadName: cleanLeadName,
         leadEmail: cleanLeadEmail,
@@ -396,7 +425,7 @@ export default function AdminDashboardPage() {
         )
       );
 
-      setEditSuccess("Team details and Team Lead updated successfully! Live pass updated.");
+      setEditSuccess("Team details, Team Name, and Registration Numbers updated successfully! Live pass updated.");
       setTimeout(() => {
         setIsEditMode(false);
         setEditSuccess("");
@@ -1615,7 +1644,7 @@ export default function AdminDashboardPage() {
               <div>
                 <span className="text-xs font-mono text-red-400 font-bold">{selectedTeam.teamId}</span>
                 <h3 className="text-xl sm:text-2xl font-extrabold text-white">
-                  {isEditMode ? `EDITING: ${selectedTeam.teamName}` : selectedTeam.teamName}
+                  {isEditMode ? `EDITING: ${editTeamName || selectedTeam.teamName}` : selectedTeam.teamName}
                 </h3>
                 {!isEditMode && (() => {
                   const selLead = getTeamLeadInfo(selectedTeam);
@@ -1634,7 +1663,7 @@ export default function AdminDashboardPage() {
                 })()}
                 {isEditMode && (
                   <p className="text-xs text-amber-300 mt-1">
-                    Edit teammate details, reassign the team lead, and save to update live passes and logins.
+                    Edit team name, registration numbers, teammate details, and reassign the team lead.
                   </p>
                 )}
               </div>
@@ -1642,7 +1671,19 @@ export default function AdminDashboardPage() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsEditMode(!isEditMode)}
+                  onClick={() => {
+                    if (!isEditMode && selectedTeam) {
+                      setEditTeamName(selectedTeam.teamName || "");
+                      setEditMembers(
+                        (selectedTeam.members || []).map((m) => ({ ...m }))
+                      );
+                      const leadInfo = getTeamLeadInfo(selectedTeam);
+                      setEditLeadIndex(leadInfo.leaderIndex >= 0 ? leadInfo.leaderIndex : 0);
+                      setEditError("");
+                      setEditSuccess("");
+                    }
+                    setIsEditMode(!isEditMode);
+                  }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
                     isEditMode
                       ? "bg-amber-600 text-white shadow-md shadow-amber-950"
@@ -1762,12 +1803,24 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => setIsEditMode(true)}
+                      onClick={() => {
+                        if (selectedTeam) {
+                          setEditTeamName(selectedTeam.teamName || "");
+                          setEditMembers(
+                            (selectedTeam.members || []).map((m) => ({ ...m }))
+                          );
+                          const leadInfo = getTeamLeadInfo(selectedTeam);
+                          setEditLeadIndex(leadInfo.leaderIndex >= 0 ? leadInfo.leaderIndex : 0);
+                          setEditError("");
+                          setEditSuccess("");
+                        }
+                        setIsEditMode(true);
+                      }}
                       className="px-3.5 py-2.5 rounded-xl glass-btn-secondary text-amber-300 hover:text-white border border-amber-500/40 font-bold text-xs uppercase flex items-center gap-1.5 transition-colors"
-                      title="Edit teammates and change team lead"
+                      title="Edit team name, registration numbers, or change team lead"
                     >
                       <Edit3 className="w-4 h-4" />
-                      <span>Edit Teammates</span>
+                      <span>Edit Team Details</span>
                     </button>
 
                     <button
@@ -1819,20 +1872,25 @@ export default function AdminDashboardPage() {
                   <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2.5 shadow-sm">
                     <Info className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>
-                      Fixed & Locked Fields: <strong>Team Name</strong>, <strong>Team ID</strong>, <strong>UTR Number</strong>, <strong>Payment Screenshot</strong>, and student <strong>Registration Numbers</strong> cannot be modified.
+                      <strong>Admin Controls Active:</strong> You can edit the <strong>Team Name</strong>, student <strong>Registration Numbers</strong>, contact information, and reassign the <strong>Team Lead</strong>. System Team ID and Payment Records remain locked for audit integrity.
                     </span>
                   </div>
 
                   {/* Team Top Details */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 p-4 rounded-2xl bg-white/5 border border-white/10">
                     <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 uppercase">
-                        <Lock className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Team Name (Locked)</span>
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-300 uppercase">
+                        <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Team Name *</span>
                       </div>
-                      <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-white font-bold uppercase truncate" title={selectedTeam.teamName}>
-                        {selectedTeam.teamName}
-                      </div>
+                      <input
+                        type="text"
+                        value={editTeamName}
+                        onChange={(e) => setEditTeamName(e.target.value.toUpperCase())}
+                        style={{ textTransform: "uppercase" }}
+                        className="px-3.5 py-2 rounded-xl glass-input text-xs text-white font-bold uppercase border border-amber-500/40 focus:border-amber-400 truncate"
+                        placeholder="ENTER TEAM NAME"
+                      />
                     </div>
 
                     <div className="flex flex-col gap-1">
@@ -1960,15 +2018,24 @@ export default function AdminDashboardPage() {
 
                               <div className="flex flex-col gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold uppercase flex items-center gap-1">
-                                  <Lock className="w-2.5 h-2.5 text-amber-400" />
-                                  <span>Reg No (Locked)</span>
+                                  <Edit3 className="w-2.5 h-2.5 text-amber-400" />
+                                  <span>Registration Number *</span>
                                 </span>
-                                <div className="px-3 py-2 rounded-lg bg-slate-900/90 border border-white/10 text-xs text-red-400 font-mono font-bold flex items-center justify-between">
-                                  <span>{m.regNo || selectedTeam.members[idx]?.regNo || "N/A"}</span>
-                                  <span className="text-[9px] px-1 py-0.2 rounded bg-white/5 border border-white/10 text-amber-400 uppercase font-sans font-bold">
-                                    Fixed
-                                  </span>
-                                </div>
+                                <input
+                                  type="text"
+                                  value={m.regNo}
+                                  onChange={(e) => {
+                                    const updated = [...editMembers];
+                                    updated[idx] = {
+                                      ...updated[idx],
+                                      regNo: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").trim(),
+                                    };
+                                    setEditMembers(updated);
+                                  }}
+                                  style={{ textTransform: "uppercase" }}
+                                  className="px-3 py-2 rounded-lg glass-input text-xs text-red-400 font-mono font-bold uppercase border border-amber-500/30 focus:border-amber-400"
+                                  placeholder="e.g. 9923004000"
+                                />
                               </div>
 
                               <div className="flex flex-col gap-1">
