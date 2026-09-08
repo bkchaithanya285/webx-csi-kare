@@ -1,16 +1,15 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Calendar, MapPin, Users, AlertTriangle, Search, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, Calendar, MapPin, Users, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { getTeamByCodeOrEmail, TeamData } from "@/lib/db";
 import { getTeamLeadInfo } from "@/lib/teamUtils";
 
 function VerifyContent() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   const rawTeamIdParam = (params?.teamId as string) || "WEB-001";
   const queryOverride = searchParams?.get("team") || searchParams?.get("lead") || searchParams?.get("id") || "";
@@ -18,9 +17,6 @@ function VerifyContent() {
 
   const [team, setTeam] = useState<TeamData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchInput, setSearchInput] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
 
   useEffect(() => {
     async function loadTeam() {
@@ -36,29 +32,6 @@ function VerifyContent() {
     }
     loadTeam();
   }, [activeLookup]);
-
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = searchInput.trim();
-    if (!clean) return;
-    setSearching(true);
-    setSearchError("");
-    try {
-      const data = await getTeamByCodeOrEmail(clean);
-      if (data) {
-        setTeam(data);
-        if (data.teamId) {
-          router.replace(`/verify/${data.teamId}`);
-        }
-      } else {
-        setSearchError(`No verified registration found for "${clean}".`);
-      }
-    } catch (err) {
-      setSearchError("Lookup failed. Please check your connection and try again.");
-    } finally {
-      setSearching(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -84,35 +57,13 @@ function VerifyContent() {
             </span>
             <h2 className="text-2xl font-extrabold text-white">INVALID EVENT PASS</h2>
             <p className="text-xs text-gray-400 leading-relaxed">
-              No registered team found matching <span className="text-red-400 font-mono font-bold">{rawTeamIdParam}</span>.
+              No registered team found matching <span className="text-red-400 font-mono font-bold">{rawTeamIdParam}</span>. If you believe this is an error, please contact the CSI organizing committee desk.
             </p>
           </div>
 
-          {/* Quick Lookup by Reg No / Team ID */}
-          <form onSubmit={handleSearch} className="w-full flex flex-col gap-2">
-            <span className="text-xs text-gray-300 font-bold text-left">Search by Student Reg No or Team ID:</span>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="e.g. WEB-038 or 99240040417"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="flex-1 px-4 py-2.5 rounded-xl glass-input text-xs text-white"
-              />
-              <button
-                type="submit"
-                disabled={searching}
-                className="px-4 py-2.5 rounded-xl glass-btn-primary text-xs font-bold uppercase disabled:opacity-50"
-              >
-                {searching ? "Searching..." : "Search"}
-              </button>
-            </div>
-            {searchError && <span className="text-xs text-red-400 text-left">{searchError}</span>}
-          </form>
-
           <Link
             href="/"
-            className="px-6 py-2.5 rounded-xl glass-btn-secondary text-xs font-bold uppercase tracking-wider text-gray-300"
+            className="px-6 py-2.5 rounded-xl glass-btn-secondary text-xs font-bold uppercase tracking-wider text-gray-300 hover:text-white transition-colors"
           >
             Return to Home
           </Link>
@@ -232,33 +183,9 @@ function VerifyContent() {
           </div>
         </div>
 
-        {/* Quick Search Another Pass */}
-        <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex flex-col gap-2.5">
-          <span className="text-[11px] font-extrabold uppercase text-gray-400 tracking-wider">
-            Verify Another Team / Search Pass:
-          </span>
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Enter Team ID (e.g. WEB-038) or Reg No..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="flex-1 px-3.5 py-2 rounded-xl glass-input text-xs text-white"
-            />
-            <button
-              type="submit"
-              disabled={searching}
-              className="px-4 py-2 rounded-xl glass-btn-primary text-xs font-bold uppercase disabled:opacity-50"
-            >
-              {searching ? "..." : "Lookup"}
-            </button>
-          </form>
-          {searchError && <span className="text-xs text-red-400">{searchError}</span>}
-        </div>
-
         {/* Footer Notice & Links */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-[11px] text-gray-400">
-          <span>🔒 Secure Verification Engine • Privacy Protected</span>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-[11px] text-gray-400 border-t border-white/10">
+          <span>🔒 Official CSI Entry Pass • Privacy Protected</span>
           <Link href="/dashboard" className="text-red-400 hover:text-red-300 font-bold underline">
             Go to My Dashboard →
           </Link>
